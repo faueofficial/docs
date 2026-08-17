@@ -34,6 +34,8 @@ CREATE TABLE ase.user_style_context (
 
 `constraints` holds abstract rules, never raw body data:
 
+`occasion_windows` carries **one row per window per year for lunar windows** — Ramadan and Eid move about eleven days annually, and a hardcoded range is silently wrong within two years. Fixed-date windows are seeded once with `year = NULL`. A lunar window with no row for the current year is inactive and logged, so the calendar degrades to silence rather than to a wrong date.
+
 ```json
 { "favor": ["defined_waist", "vertical_line"],
   "avoid": ["boxy_crop", "high_volume_hip"],
@@ -315,6 +317,22 @@ CREATE TABLE ase.agent_runs (
   outcome  TEXT,                   -- accepted | dismissed | regenerate | no_response
   ran_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE ase.occasion_windows (
+  id          UUID PRIMARY KEY,
+  key         TEXT NOT NULL,        -- detty_december | ramadan | wedding_season ...
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL,        -- fixed | lunar | weather_derived | recurring
+  region      TEXT NOT NULL DEFAULT 'NG',
+  year        INTEGER,              -- NULL for windows that repeat on fixed dates
+  starts_on   DATE NOT NULL,
+  ends_on     DATE NOT NULL,
+  intensity   REAL NOT NULL DEFAULT 1.0,
+  occasions   TEXT[],               -- which occasions this window amplifies
+  notes       TEXT,
+  UNIQUE (key, region, year)
+);
+CREATE INDEX ON ase.occasion_windows (region, starts_on, ends_on);
 
 CREATE TABLE ase.weather_cache (
   geohash5    TEXT NOT NULL,

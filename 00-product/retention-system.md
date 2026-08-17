@@ -68,6 +68,8 @@ Scheduled by the `lifecycle` worker. All require `marketing_comms` except where 
 
 Nigeria-specific and the highest-value triggers FAUE has, because they align with when people are actually thinking about clothes.
 
+**Dates come from `ase.context.occasions`, not from a hardcoded calendar in the retention worker.** Ramadan and Eid shift about eleven days a year; a campaign scheduled against a literal date is quietly wrong within two years and nothing errors to tell you.
+
 | Trigger | Window | Message |
 |---|---|---|
 | **Detty December** | Dec 1 – Jan 5 | Event-density peak; the single biggest styling period of the year |

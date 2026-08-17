@@ -126,7 +126,7 @@ Every incident that could recur produces either a test, an alert, or a runbook. 
 | Hosting | Railway support |
 | Database | Provider support |
 | Regulator (Nigeria) | NDPC |
-| Security reports | security@faueofficial.com |
+| Security reports | faueofficial@gmail.com |
 
 ---
 

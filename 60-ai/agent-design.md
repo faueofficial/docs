@@ -14,7 +14,7 @@ Graduated deliberately. Trust is earned before it is spent.
 |---|---|---|---|
 | **L0** | Suggests on app open | Vault, DNA, weather | MVP |
 | **L1** | Daily push at a chosen hour | Notify, scheduler, `agent_proactive` | M1-2 |
-| **L2** | Triggered — weather shift, upcoming event, new pin, unworn item | Event stream | M3+ |
+| **L2** | Triggered — weather shift, **cultural window** (`ase.context.occasions`), upcoming event, new pin, unworn item | Event stream | M3+ |
 | **L3** | Planning — event prep, travel packing, aso-ebi coordination, tailor lead times | Calendar, tailor network | Y2 |
 
 Each level is a separate consent decision. A user who wants an on-open suggestion has not agreed to a daily push, and treating those as the same thing is how apps earn notification opt-outs.

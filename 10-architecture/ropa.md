@@ -1,6 +1,6 @@
 # Record of Processing Activities
 
-**Stage:** MVP · **Controller:** FAUE · **Contact:** hello@databackedafrica.com
+**Stage:** MVP · **Controller:** FAUE · **Contact:** faueofficial@gmail.com
 **Last reviewed:** 2026-08-17 · **Review cadence:** quarterly and on any schema change
 
 Required by GDPR Article 30 and the equivalent NDPA provisions. **Anything not in this register may not be collected.** A new field without a row here fails review.

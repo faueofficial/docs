@@ -282,6 +282,38 @@ paths:
               schema: { $ref: '#/components/schemas/Weather' }
         '204': { description: Unavailable }
 
+  /internal/context/occasions:
+    get:
+      summary: Active and upcoming cultural windows for a region
+      description: |
+        The cultural calendar. Read by look generation (occasion defaults and the
+        formality prior), the agent (L2 triggers), and the retention worker
+        (campaign scheduling) — one source rather than three copies.
+
+        Returns an empty list rather than an error when nothing is active or the
+        calendar has no rows for the current year. Callers proceed without it.
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: region
+          in: query
+          schema: { type: string, default: NG }
+        - name: horizon_days
+          in: query
+          description: How far ahead to report upcoming windows.
+          schema: { type: integer, default: 30, minimum: 0, maximum: 180 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [signals]
+                properties:
+                  signals:
+                    type: array
+                    items: { $ref: '#/components/schemas/OccasionSignal' }
+
   /internal/embeddings/item:
     post:
       summary: Embed and index a vault item
@@ -513,6 +545,30 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Weather'
             - type: 'null'
+
+    OccasionSignal:
+      type: object
+      required: [key, name, status, intensity]
+      properties:
+        key:
+          type: string
+          example: detty_december
+        name: { type: string }
+        status:
+          type: string
+          enum: [active, upcoming, inactive]
+        days_until:
+          type: [integer, 'null']
+          description: Null when the window is already active.
+        intensity:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: How strongly this window should bias generation.
+        occasions:
+          type: array
+          items: { type: string }
+          description: Which occasions this window amplifies.
 
     Weather:
       type: object

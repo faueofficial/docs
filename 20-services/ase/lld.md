@@ -36,7 +36,7 @@ app/
 │  ├─ session.py  tools/  review.py
 │  └─ guardrails/           input.py intent.py injection.py grounding.py output.py
 ├─ agent/                   planner.py memory.py triggers.py levels.py
-├─ context/                 weather.py providers/ seasonality.py
+├─ context/                 weather.py occasions.py providers/
 ├─ vector/                  index.py search.py migration.py
 ├─ events/  workers/        embed_items, rebuild_context, agent_daily, reembed
 ```
@@ -172,11 +172,76 @@ Memory in three tiers — profile facts (durable), semantic preferences (learned
 
 ## 7. context
 
+Two signals with the same shape: given a user and a time, return facts that bias generation. Both degrade silently — no consent, no data, or a provider down all mean generation proceeds without them.
+
+### 7.1 weather
+
 Weather from Open-Meteo, cached per `(geohash5, hour_bucket)` so an entire city costs one upstream call. Location is city-level only; precise coordinates are never received or stored.
 
 Signals used: temperature and feels-like, rain probability, humidity, UV, and a **harmattan dust index**. Saharan dust materially changes what fabric and colour are wearable in Nigeria between December and February, and no generic weather integration captures it.
 
-Every weather call degrades silently — no consent, no data, or provider down all mean generation proceeds without it.
+### 7.2 occasions
+
+The cultural calendar. Answers "what is happening, and what is coming" for a user's locale.
+
+This exists as one module because three consumers otherwise each grow their own copy: look generation biases occasion defaults, the agent fires L2 triggers from it, and the retention worker schedules cultural campaigns from it. One source, three readers.
+
+> **It is not "occasion routing".** That name (from the superseded architecture in `90-meta/legacy/`) describes request dispatch, which this is not. Occasion is a styling input, so it lives with the thing that does styling. Putting it in the gateway would mean the gateway either duplicating the style library's occasion knowledge or calling `ase` to ask what an Owambe means — which is backwards.
+
+#### Three layers
+
+**Taxonomy** — the eight occasions and what each implies. Static, versioned with the style library:
+
+| Occasion | Formality | Fabric bias | Notes |
+|---|---|---|---|
+| `owambe` | formal → ceremonial | Aso-oke, lace, heavy Ankara | The highest-stakes occasion in the product |
+| `wedding` | formal → ceremonial | Lace, brocade, Aso-oke | Often aso-ebi coordinated |
+| `church` | smart-casual → formal | Modest cuts, lace, cotton | Sunday-specific |
+| `corporate` | business → formal | Wool, crisp cotton, structured | Weekday, client-facing variants |
+| `casual` | casual | Cotton, denim, linen | The default |
+| `date_night` | smart-casual → formal | Silk, fitted cuts | Evening |
+| `travel` | casual | Linen, jersey, breathable | Comfort and packing constraints |
+| `funeral` | formal | Muted palette, lace, Aso-oke | Palette constraints are strict |
+
+**Windows** — when occasions cluster, which is the part a generic styling app cannot know:
+
+| Window | Kind | Period |
+|---|---|---|
+| Detty December | fixed | Dec 1 – Jan 5 |
+| Wedding season | fixed | Nov – Jan, Apr – Jun |
+| Harmattan | weather-derived | Dec – Feb, confirmed by the dust index |
+| Ramadan / Eid | **lunar** | Shifts ~11 days a year |
+| Christmas / Easter | fixed / computed | Dec 25; Easter is computed |
+| Month-end | recurring | Payday; higher planning intent |
+
+**Derived signals** — what the three consumers actually read:
+
+```python
+@dataclass(frozen=True)
+class OccasionSignal:
+    key: str                                    # "detty_december"
+    name: str
+    status: Literal["active", "upcoming", "inactive"]
+    days_until: int | None                      # None when already active
+    intensity: float                            # 0.0-1.0, how strongly to bias
+```
+
+#### The lunar problem
+
+Ramadan and Eid move roughly eleven days earlier each year. **Hardcoded date windows are silently wrong within two years** — nothing errors, the calendar simply stops matching reality, and the failure shows up as culturally tone-deaf suggestions rather than as a bug.
+
+Handled with **one row per window per year** rather than a computation. Someone confirms the dates annually, which is a fifteen-minute task and auditable, where a lunar-calendar library is a dependency and an approximation. Fixed-date windows (Detty December, Christmas, harmattan) are seeded once.
+
+A window with no row for the current year is treated as inactive and logged — the calendar degrades to silence rather than to a wrong date.
+
+#### Who reads it
+
+| Consumer | Use |
+|---|---|
+| Look generation | Bias the default occasion and the formality prior when a window is active |
+| Agent L2 (`M3+`) | "Detty December in three weeks — plan your looks" |
+| Retention worker | Schedule cultural campaigns from real dates, not a hardcoded calendar |
+| Dashboard chips | Reorder seasonally — Owambe first in December. A read, not a module |
 
 ---
 

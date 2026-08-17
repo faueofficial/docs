@@ -1,6 +1,6 @@
 # Reconciliation — legacy architecture vs. current design
 
-**Status:** PARTIALLY CLOSED · **Raised:** 2026-08-17 · **Naming resolved:** 2026-08-17 ([ADR 0022](../80-adr/0022-canonical-domain-and-service-naming.md))
+**Status:** CLOSED · **Raised:** 2026-08-17 · **Naming resolved:** 2026-08-17 ([ADR 0022](../80-adr/0022-canonical-domain-and-service-naming.md))
 **Sources:** [`legacy/01_SYSTEM_ARCHITECTURE.md`](legacy/01_SYSTEM_ARCHITECTURE.md) (from the `docs` remote) vs. [`../10-architecture/hld.md`](../10-architecture/hld.md)
 
 The `docs` remote contained an earlier architecture document written independently of the platform design produced from the Figma file and the design session. Both are considered work. This page lists where they disagree, what was adopted, and what still needs a call.
@@ -83,7 +83,7 @@ These are better than what the current documents had, and are being folded in:
 | ~~1~~ | ~~`ase` or `archive` + `atelier`?~~ | **Closed** — `ase` ([ADR 0022](../80-adr/0022-canonical-domain-and-service-naming.md)) |
 | ~~2~~ | ~~If split: where does the vector index live?~~ | **Moot** — no split |
 | ~~3~~ | ~~Storage: Cloudinary, R2, or Railway?~~ | **Closed** — Cloudinary primary, R2 backup, Railway for local/staging |
-| 4 | Is "Occasion Routing" a distinct gateway module, or part of look generation? | OPEN — low stakes, decide when building |
+| ~~4~~ | ~~"Occasion Routing" — gateway module or part of generation?~~ | **Closed** — neither. `ase.context.occasions`, a context signal beside weather |
 
 ### 3. Storage — resolved
 
@@ -107,4 +107,24 @@ The `docs` remote was created independently and had three commits. The local doc
 
 The two were merged with `--allow-unrelated-histories`, preserving both. The legacy document is retained under `90-meta/legacy/` with a supersession banner rather than deleted — it is the only written record of the earlier thinking, and several of its ideas are better than what replaced them.
 
-**Close this page** by making the decisions in §5, writing an ADR for each, and either updating the legacy document's banner to point at the resolution or deleting it once nothing references it.
+### 4. Occasion routing — resolved
+
+**Neither a gateway module nor part of generation.** It became `ase.context.occasions`, a context signal with the same shape as weather.
+
+The legacy name bundled three concerns:
+
+| Concern | Where it actually lives | Status |
+|---|---|---|
+| Occasion as a request parameter | An enum on `POST /looks/generate` | Already existed |
+| Occasion as a styling constraint | `style_library.occasion_tags`, filtered in the legal pool | Already existed |
+| **Occasion as a temporal, cultural signal** | **`ase.context.occasions`** | **This was the real gap** |
+
+The third was scattered across `seasonality.py`, the agent's L2 triggers, and the retention worker's cultural campaigns — three consumers each implying their own copy. Now one source, three readers.
+
+"Routing" was dropped from the name because it describes request dispatch, which this is not.
+
+---
+
+## 7. Closed
+
+Every item in §5 is resolved. The legacy document remains under `legacy/` as the only record of the earlier thinking; it can be deleted once nothing references it, though its ephemeral-VTO design is worth keeping visible until that lands.

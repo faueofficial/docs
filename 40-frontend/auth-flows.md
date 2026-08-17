@@ -58,7 +58,13 @@ The session lands on the device that started the flow, which is what the user ex
 
 ### Deliverability
 
-Login depends on email arriving. Delivery is **Resend**, sending from the subdomain `mail.faueofficial.com` so a reputation problem never affects the apex. SPF, DKIM and DMARC on that subdomain are an operational requirement, not a nicety.
+Login depends on email arriving. Delivery is **Resend**, sending from the subdomain `mail.faueofficial.com` so a reputation problem never affects the apex.
+
+> **Two different addresses, and they cannot be the same one.** The public contact
+> address is `faueofficial@gmail.com`. The magic-link **sending** address must be on
+> a domain FAUE controls and has verified in Resend — Resend will not send `from` a
+> Gmail address, and neither will any transactional provider, because sending as a
+> domain you do not own is what SPF and DKIM exist to prevent. SPF, DKIM and DMARC on that subdomain are an operational requirement, not a nicety.
 
 Resend allows 2 requests per second on the default plan, so a signup burst can be rate-limited upstream. The client should treat a `503` on link request as retryable, not as a rejected address.
 
