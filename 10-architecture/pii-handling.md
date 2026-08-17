@@ -62,6 +62,22 @@ upload (direct to CDN with a short-lived signed credential)
 
 **Original discarded** because keeping it means keeping the unredacted face and the coordinates, and nothing in the product needs them.
 
+### Variants are generated in the same pass
+
+The pipeline already decodes and re-encodes every image, so it emits sized variants while it has the bitmap open: a 200 px thumbnail, a 400 px preview, and the full derivative. No separate transformation step, and no transformation service required.
+
+This matters for cost, not tidiness. A vault grid is many small image requests on metered Nigerian mobile data — downloading full resolution for a thumbnail grid spends the user's money.
+
+### Where derivatives are stored
+
+| Tier | Role |
+|---|---|
+| **Cloudinary** | Primary — storage, CDN, on-the-fly transforms if ever needed |
+| **Cloudflare R2** | Backup replica. A different provider from primary, the same rule already applied to database backups |
+| Railway object storage | Local and staging only; nobody's phone downloads from it |
+
+All three sit behind one `StorageProvider` interface, so the primary is a configuration choice rather than an assumption baked into upload code. Bandwidth — not storage — is the binding constraint, and approaching Cloudinary's free-tier bandwidth is the trigger to move primary to R2.
+
 ### Client-side blur is not a control
 
 The Flutter app may blur locally for a better preview. The server repeats every step and treats client output as untrusted. A modified client simply skips a client-side step, and the unredacted image crosses the network regardless.
