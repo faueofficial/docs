@@ -171,3 +171,21 @@ Not by argument. The comparison runs as a shadow evaluation and then an experime
 | Time to first look | Whether the wait is tolerable |
 
 Bias in the reading: `composite` will win on cost and speed and lose on first-session appeal. The honest question is whether `generative`'s cold-start advantage is worth its price once vaults are populated — which is a question about month two, not week one.
+
+---
+
+## 10. Virtual try-on output is ephemeral
+
+`M1-2`. Adopted from the earlier architecture work — see [`../90-meta/reconciliation.md`](../90-meta/reconciliation.md) — and it is the right default.
+
+VTO is the only feature that renders a real person's body, so it is the only asset class with a default expiry:
+
+| Rule | Reason |
+|---|---|
+| Generated VTO images carry `is_ephemeral = true` | Makes the purge queryable rather than implicit |
+| A scheduled job purges them from storage after **24 hours** | Full-body imagery should not quietly accumulate |
+| Purge is skipped only when the user explicitly saves the look | Retention becomes a user decision, never a default |
+| The provider receives a **non-retention flag on every request** | Contractual control made explicit per call rather than assumed from a contract |
+| Provider candidates: Fashn.ai, Replicate | Selected on likeness fidelity, latency, and retention terms |
+
+This also needs a dedicated `body_imagery` consent purpose, separate from `camera_photos`, with immediate deletion of derived assets on revocation. The no-people rule in §6 is suspended only for this feature, only with that consent, and only for the user's own body.
