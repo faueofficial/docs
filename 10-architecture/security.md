@@ -6,18 +6,27 @@
 
 ## 0. Outstanding action
 
-**The `api-gateway` git remote contains a GitHub personal access token in its URL** (`https://ghp_...@github.com/faueofficial/api-gateway.git`). That token must be treated as compromised.
+The `api-gateway` git remote contained a GitHub personal access token in its URL. **That token must still be treated as compromised.**
+
+| Step | Status |
+|---|---|
+| Remote reset to a token-free URL | **Done** (2026-08-17, repo cleanup) |
+| Verified the token was never committed to git history | **Done** — it existed only in local `.git/config` |
+| Verified no token remains in any working tree | **Done** |
+| **Revoke the token at github.com/settings/tokens** | **OUTSTANDING — owner action** |
+
+Removing it from disk does not un-leak it: it was visible in a terminal session and may exist in shell history, backups, or scrollback. Revocation is the only control that actually closes it.
 
 ```bash
-# 1. Revoke at https://github.com/settings/tokens
-# 2. Reset the remote
-git -C api-gateway remote set-url origin git@github.com:faueofficial/api-gateway.git
-# 3. Verify no token remains
+# verify the remote is clean
 git -C api-gateway config --get remote.origin.url
-grep -r "ghp_" api-gateway/ --exclude-dir=.git
+# → https://github.com/faueofficial/api-gateway.git
+
+# optional: switch to SSH once keys are set up
+git -C api-gateway remote set-url origin git@github.com:faueofficial/api-gateway.git
 ```
 
-This is launch-blocking and should be done before anything else in this document.
+Revocation is launch-blocking.
 
 ---
 

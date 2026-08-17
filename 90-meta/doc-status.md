@@ -1,6 +1,6 @@
 # Documentation Status
 
-**Updated:** 2026-08-17 · **Consistency sweep:** passed (96 files, 0 broken links, vocabulary verified)
+**Updated:** 2026-08-17 · **Consistency sweep:** passed (99 files, 0 broken links, vocabulary verified) · **Repo cleanup:** complete
 
 Status values: `done` (written and verified) · `draft` (written, needs review) · `planned` (task exists, not written) · `deferred` (deliberately not written yet, with a reason).
 
@@ -141,6 +141,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | 6 | Tailor segment reachability — validate with 5 tailors before building anything | Professional track (Y2) | shared |
 | 7 | Delegated consent design (client → stylist, partial and revocable) | Professional track (Y2) | backend |
 | 8 | VTO consent purpose and guardrail exception, designed alongside the research | VTO | backend |
+| 9 | **Revoke the leaked GitHub PAT** — remote is clean, token is not | Launch | backend |
 
 ## Design gaps requiring new Figma work
 
