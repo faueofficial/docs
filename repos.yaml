@@ -1,0 +1,141 @@
+# FAUE repository manifest
+#
+# The workspace root (/faue) is intentionally NOT a git repository.
+# Every entry below is a standalone repository cloned into `dir` beneath it.
+# `scripts/bootstrap.sh` reads this file to hydrate or update a machine.
+
+version: 1
+org: faueofficial
+remote_base: git@github.com:faueofficial
+
+repos:
+  - dir: docs
+    repo: faue-platform
+    stack: markdown
+    stage: MVP
+    owner: backend
+    description: >
+      Architecture, contracts, frontend handoff, runbooks, ADRs.
+      This manifest lives here.
+
+  - dir: faue-core
+    repo: faue-core
+    stack: python-lib
+    stage: MVP
+    owner: backend
+    description: >
+      Shared runtime library: event envelope, outbox publisher, idempotent
+      consumer base, OpenTelemetry wiring, PII-scrubbing logging, envelope
+      encryption and blind index, consent dependency, error taxonomy,
+      service JWT, config loader. Also owns the shared dependency contract
+      (requirements/*.in and constraints.txt).
+
+  - dir: faue-db
+    repo: faue-db
+    stack: python-lib
+    stage: MVP
+    owner: backend
+    description: >
+      SQLAlchemy models for every schema plus the single Alembic project.
+      Model changes and their migrations land here together.
+
+  - dir: api-gateway
+    repo: api-gateway
+    stack: fastapi
+    stage: MVP
+    owner: backend
+    public_ingress: true
+    schemas: [gateway]
+    description: >
+      Public edge. Identity, profile, quiz, vault, saves, actions,
+      integrations, notify module, privacy, admin API.
+
+  - dir: ase
+    repo: ase
+    stack: fastapi
+    stage: MVP
+    owner: backend
+    public_ingress: false
+    schemas: [ase]
+    description: >
+      Styling intelligence. Embeddings, retrieval, look generation,
+      fabric analysis, spree module, agent, weather context.
+
+  - dir: app
+    repo: faue-app
+    stack: flutter
+    stage: MVP
+    owner: frontend
+    description: The product. All user flows.
+
+  - dir: web
+    repo: faue-web
+    stack: nextjs
+    stage: MVP
+    owner: frontend
+    description: >
+      Landing page, public share pages (/dna/:id, /look/:id), magic-link
+      landing, app-store redirects, well-known deep-link files.
+
+  - dir: admin
+    repo: faue-admin
+    stack: nextjs
+    stage: MVP
+    owner: backend
+    description: >
+      Internal operations console. Separate deployment, separate auth realm,
+      network-gated.
+
+  - dir: infra
+    repo: faue-infra
+    stack: compose-ci
+    stage: MVP
+    owner: backend
+    description: >
+      Local infra profile (Postgres+pgvector, Redis, RabbitMQ, MinIO),
+      Railway service configuration, reusable CI workflows.
+
+  - dir: catalog
+    repo: catalog
+    stack: fastapi
+    stage: M1-2
+    owner: backend
+    public_ingress: false
+    schemas: [catalog]
+    description: >
+      Brand and product ingestion, normalisation, enrichment, link health.
+      Until built, these responsibilities live as a bounded module in ase.
+
+  - dir: media
+    repo: media
+    stack: fastapi
+    stage: M1-2
+    owner: backend
+    public_ingress: false
+    schemas: [media]
+    description: >
+      Uploads, image PII pipeline, share-card and tailor-share rendering.
+      Until built, these responsibilities live as a bounded module in gateway.
+
+# Designed in hld.md, no repository yet.
+planned:
+  - repo: brand
+    stage: M3+
+    description: Brand dashboard, self-serve catalog, promoted placement.
+  - repo: commerce
+    stage: M3+
+    description: Subscriptions, affiliate ledger, payouts, orders.
+
+# Present in the workspace, deliberately outside the map.
+excluded:
+  - dir: atelier
+    reason: >
+      Prototype workspace. atelier/drip-match was inspected during repo
+      cleanup: composer and clash_detector both raised NotImplementedError,
+      so only services/scorer.py held working code. That file was ported to
+      ase/app/engine/scoring.py. Its ChromaDB layer is not carried forward,
+      and nothing else remains to port.
+  - dir: archive
+    reason: Earlier NextJS + Python experiment. Kept for reference only.
+  - dir: borr
+    reason: Unrelated static files.

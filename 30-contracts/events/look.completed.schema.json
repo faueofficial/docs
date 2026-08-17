@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.faue.app/events/look.completed.schema.json",
+  "title": "look.completed",
+  "description": "Stage: MVP. Producer: ase. Consumers: gateway, notify, analytics.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "name",
+    "version",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUIDv7. Consumers deduplicate on this."
+    },
+    "name": {
+      "const": "look.completed"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the fact became true, not when published."
+    },
+    "producer": {
+      "const": "ase"
+    },
+    "user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "look_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minItems": 1
+        },
+        "renderer": {
+          "type": "string",
+          "enum": [
+            "generative",
+            "composite",
+            "hybrid"
+          ]
+        },
+        "duration_ms": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "job_id",
+        "look_ids",
+        "renderer",
+        "duration_ms"
+      ]
+    }
+  }
+}

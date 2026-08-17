@@ -1,0 +1,528 @@
+openapi: 3.1.0
+
+info:
+  title: ase Internal API
+  version: 1.0.0
+  description: |
+    Internal styling API. Called by `api-gateway` only, over the private network,
+    authenticated with a short-lived service JWT carrying `aud: ase`.
+
+    Never exposed publicly. No user token is accepted here — `ase` trusts
+    `X-User-Id` because the caller is authenticated as the gateway.
+
+    `ase` receives derived silhouette constraints, never raw body measurements.
+
+servers:
+  - url: http://ase.internal:8001
+    description: Private network
+  - url: http://localhost:8001
+    description: Local
+
+security:
+  - serviceAuth: []
+
+paths:
+
+  /internal/looks/generate:
+    post:
+      summary: Enqueue look generation
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, source]
+              properties:
+                user_id: { type: string, format: uuid }
+                source: { type: string, enum: [vault, fabric, prompt, agent] }
+                item_ids: { type: array, items: { type: string, format: uuid } }
+                fabric_asset_id: { type: string, format: uuid }
+                occasion: { type: [string, 'null'] }
+                mood: { type: [string, 'null'] }
+                note: { type: [string, 'null'], maxLength: 280 }
+                use_weather: { type: boolean, default: false }
+                count: { type: integer, minimum: 1, maximum: 5, default: 3 }
+                constraints:
+                  $ref: '#/components/schemas/Constraints'
+      responses:
+        '202':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job_id]
+                properties:
+                  job_id: { type: string, format: uuid }
+        '422': { $ref: '#/components/responses/PipelineError' }
+        '429': { $ref: '#/components/responses/PipelineError' }
+
+  /internal/looks/jobs/{job_id}:
+    get:
+      summary: Job status
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobStatus' }
+        '404': { description: Unknown job }
+
+  /internal/looks/{look_id}:
+    get:
+      summary: Get a look
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: look_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Look' }
+        '404': { description: Not found }
+
+  /internal/looks/{look_id}/regenerate:
+    post:
+      summary: Regenerate, excluding the previous result
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: look_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string, format: uuid }
+
+  /internal/looks/{look_id}/adjust:
+    post:
+      summary: Adjust a look
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: look_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                swap_item_id: { type: string, format: uuid }
+                occasion: { type: [string, 'null'] }
+                note: { type: [string, 'null'] }
+      responses:
+        '202':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string, format: uuid }
+
+  /internal/fabric/suggest:
+    post:
+      summary: Classify a fabric and suggest native styles
+      description: Synchronous. Rules select the styles; the model classifies and explains.
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, asset_id]
+              properties:
+                user_id: { type: string, format: uuid }
+                asset_id: { type: string, format: uuid }
+                fabric_type: { type: [string, 'null'] }
+                occasion: { type: [string, 'null'] }
+                gender_presentation: { type: [string, 'null'] }
+                constraints: { $ref: '#/components/schemas/Constraints' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FabricAnalysis' }
+        '422': { $ref: '#/components/responses/PipelineError' }
+
+  /internal/spree/sessions:
+    post:
+      summary: Start a spree session
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string, format: uuid }
+
+  /internal/spree/sessions/{session_id}/messages:
+    post:
+      summary: Send a message, stream the reply
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: string, format: uuid }
+                text: { type: [string, 'null'], maxLength: 1000 }
+                asset_ids: { type: array, items: { type: string, format: uuid }, maxItems: 3 }
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /internal/agent/today:
+    get:
+      summary: Today's suggestion, generated on demand if absent
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: user_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentSuggestion' }
+        '204': { description: No suggestion available and none could be generated }
+
+  /internal/agent/runs/{run_id}/outcome:
+    post:
+      summary: Record the outcome of a suggestion
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [accepted, dismissed, regenerate] }
+      responses:
+        '204': { description: Recorded }
+
+  /internal/context/weather:
+    get:
+      summary: Weather for a coarse location
+      description: Returns 204 when unavailable or not consented. Callers proceed without it.
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: geohash5
+          in: query
+          required: true
+          schema: { type: string, minLength: 5, maxLength: 5 }
+        - name: user_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Weather' }
+        '204': { description: Unavailable }
+
+  /internal/embeddings/item:
+    post:
+      summary: Embed and index a vault item
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id, user_id, image_url]
+              properties:
+                item_id: { type: string, format: uuid }
+                user_id: { type: string, format: uuid }
+                image_url: { type: string, format: uri }
+      responses:
+        '202': { description: Queued }
+
+  /internal/embeddings/reembed:
+    post:
+      summary: Start an embedding model migration
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model_id, subject_type]
+              properties:
+                model_id: { type: string }
+                subject_type: { type: string, enum: [vault, style, fabric, aspiration, product] }
+      responses:
+        '202': { description: Queued }
+
+  /internal/admin/health:
+    get:
+      summary: Pipeline health, budgets, index statistics
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stage_latency_ms: { type: object, additionalProperties: { type: number } }
+                  budgets: { type: object }
+                  index_stats: { type: object }
+                  embedding_coverage: { type: number }
+
+  /internal/admin/model-config:
+    get:
+      summary: Resolved task to tier to model mapping
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+
+  /internal/admin/kill-switch:
+    post:
+      summary: Enable or disable a model-backed task
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task, enabled]
+              properties:
+                task: { type: string }
+                enabled: { type: boolean }
+      responses:
+        '204': { description: Applied }
+
+components:
+
+  securitySchemes:
+    serviceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Service JWT, 5-minute lifetime, aud must be "ase".
+
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: true
+      schema: { type: string }
+    UserId:
+      name: X-User-Id
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
+
+  responses:
+    PipelineError:
+      description: Expected pipeline outcome or refusal
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required: [type, status]
+            properties:
+              type:
+                type: string
+                enum: [empty_pool, budget_exceeded, guardrail_blocked, model_unavailable, render_failed, context_unavailable, invalid_constraints]
+              status: { type: integer }
+              detail: { type: string }
+              stage:
+                type: string
+                enum: [context, filter, assemble, rank, render, explain]
+
+  schemas:
+
+    Constraints:
+      type: object
+      description: Derived silhouette rules. Never raw measurements.
+      properties:
+        favor: { type: array, items: { type: string } }
+        avoid: { type: array, items: { type: string } }
+        fit_preference: { type: [string, 'null'], enum: [fitted, regular, relaxed, null] }
+        sizes: { type: object, additionalProperties: { type: string } }
+
+    JobStatus:
+      type: object
+      required: [job_id, status, progress]
+      properties:
+        job_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, analyzing, assembling, rendering, done, failed]
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        label: { type: string }
+        result:
+          type: [object, 'null']
+          properties:
+            look_ids: { type: array, items: { type: string, format: uuid } }
+        error:
+          type: [object, 'null']
+          properties:
+            reason_code: { type: string }
+            stage: { type: string }
+
+    Look:
+      type: object
+      required: [look_id, title, items, renderer]
+      properties:
+        look_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        why_this_works: { type: [string, 'null'] }
+        image_url: { type: [string, 'null'], format: uri }
+        occasion: { type: [string, 'null'] }
+        renderer: { type: string, enum: [generative, composite, hybrid] }
+        score: { type: [number, 'null'] }
+        strategy_version: { type: string }
+        prompt_version: { type: [string, 'null'] }
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, role]
+            properties:
+              name: { type: string }
+              role: { type: string }
+              vault_item_id: { type: [string, 'null'], format: uuid }
+              image_url: { type: [string, 'null'], format: uri }
+              note: { type: [string, 'null'] }
+
+    FabricAnalysis:
+      type: object
+      required: [detected_type, confidence, styles]
+      properties:
+        detected_type:
+          type: string
+          enum: [ankara, lace, aso_oke, adire, cotton, chiffon, other]
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        attributes:
+          type: object
+          properties:
+            motif_scale: { type: string, enum: [small, medium, large] }
+            weight: { type: string, enum: [light, medium, heavy] }
+            dominant_colors: { type: array, items: { type: string } }
+        styles:
+          type: array
+          minItems: 3
+          maxItems: 5
+          items:
+            type: object
+            required: [style_id, name, reason]
+            properties:
+              style_id: { type: string, format: uuid }
+              name: { type: string }
+              reference_image_url: { type: [string, 'null'], format: uri }
+              reason: { type: string }
+              formality: { type: string }
+              accessories:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    image_url: { type: [string, 'null'], format: uri }
+                    note: { type: [string, 'null'] }
+
+    AgentSuggestion:
+      type: object
+      required: [run_id, look_id, trigger]
+      properties:
+        run_id: { type: string, format: uuid }
+        look_id: { type: string, format: uuid }
+        trigger:
+          type: string
+          enum: [daily, weather, event, proactive, on_demand]
+        rationale: { type: string }
+        weather:
+          oneOf:
+            - $ref: '#/components/schemas/Weather'
+            - type: 'null'
+
+    Weather:
+      type: object
+      properties:
+        temp_c: { type: number }
+        feels_like_c: { type: number }
+        condition: { type: string }
+        rain_probability: { type: number }
+        humidity: { type: number }
+        uv: { type: number }
+        dust_index:
+          type: [number, 'null']
+          description: Harmattan season Saharan dust level. Nigeria-specific.

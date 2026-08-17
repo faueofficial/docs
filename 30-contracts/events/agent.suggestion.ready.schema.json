@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.faue.app/events/agent.suggestion.ready.schema.json",
+  "title": "agent.suggestion.ready",
+  "description": "Stage: MVP. Producer: ase. Consumers: notify, analytics.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "name",
+    "version",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUIDv7. Consumers deduplicate on this."
+    },
+    "name": {
+      "const": "agent.suggestion.ready"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the fact became true, not when published."
+    },
+    "producer": {
+      "const": "ase"
+    },
+    "user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "look_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "daily",
+            "weather",
+            "event",
+            "proactive"
+          ]
+        }
+      },
+      "required": [
+        "run_id",
+        "look_id",
+        "trigger"
+      ]
+    }
+  }
+}

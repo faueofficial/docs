@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.faue.app/events/notification.opened.schema.json",
+  "title": "notification.opened",
+  "description": "Stage: MVP. Producer: gateway. Consumers: analytics.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "name",
+    "version",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUIDv7. Consumers deduplicate on this."
+    },
+    "name": {
+      "const": "notification.opened"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the fact became true, not when published."
+    },
+    "producer": {
+      "const": "gateway"
+    },
+    "user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "template_id": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "push",
+            "whatsapp",
+            "email",
+            "sms",
+            "inbox"
+          ]
+        }
+      },
+      "required": [
+        "template_id",
+        "channel"
+      ]
+    }
+  }
+}

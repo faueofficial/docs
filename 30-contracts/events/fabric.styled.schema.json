@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.faue.app/events/fabric.styled.schema.json",
+  "title": "fabric.styled",
+  "description": "Stage: MVP. Producer: ase. Consumers: analytics.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "name",
+    "version",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUIDv7. Consumers deduplicate on this."
+    },
+    "name": {
+      "const": "fabric.styled"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the fact became true, not when published."
+    },
+    "producer": {
+      "const": "ase"
+    },
+    "user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "detected_type": {
+          "type": "string",
+          "enum": [
+            "ankara",
+            "lace",
+            "aso_oke",
+            "adire",
+            "cotton",
+            "chiffon",
+            "other"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "style_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "required": [
+        "asset_id",
+        "detected_type",
+        "confidence",
+        "style_ids"
+      ]
+    }
+  }
+}

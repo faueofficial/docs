@@ -1,0 +1,1618 @@
+openapi: 3.1.0
+
+info:
+  title: FAUE Gateway API
+  version: 1.0.0
+  description: |
+    The single public API for FAUE. Consumed by the Flutter app (`faue-app`) and the
+    web surfaces (`faue-web`). Generate clients from this document rather than
+    hand-writing them.
+
+    **Stage tags** appear in each operation's description: `MVP`, `M1-2`, `M3+`, `Y2`.
+    Operations tagged beyond `MVP` are specified but not yet implemented.
+
+    **Consent.** Operations that require a consent purpose declare it in their
+    description as `Consent: <purpose>`. A missing grant returns `403` with
+    `type: consent_required` and the purpose in `errors[]` — the client should
+    present the consent surface, not an error dialog.
+
+    **Errors** are RFC 7807 problem documents. See `docs/40-frontend/error-model.md`.
+
+    **Long-running work** returns `202` with a job envelope. See
+    `docs/40-frontend/realtime.md`.
+  contact:
+    name: FAUE Backend
+    email: hello@databackedafrica.com
+
+servers:
+  - url: https://api.faue.app/v1
+    description: Production
+  - url: https://staging-api.faue.app/v1
+    description: Staging (fixtures available via X-Mock-Mode)
+  - url: http://localhost:8000/v1
+    description: Local
+
+tags:
+  - name: auth
+    description: Magic link, OAuth, session lifecycle
+  - name: profile
+    description: Profile, body profile, consent
+  - name: quiz
+    description: Style DNA
+  - name: vault
+    description: The user's own wardrobe
+  - name: looks
+    description: Look generation and saved looks
+  - name: fabric
+    description: Fabric analysis and tailor share
+  - name: spree
+    description: Conversational styling
+  - name: agent
+    description: Proactive daily styling
+  - name: integrations
+    description: Pinterest
+  - name: notifications
+    description: Inbox, preferences, device tokens
+  - name: uploads
+    description: Signed upload credentials
+  - name: privacy
+    description: Data subject rights
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ─────────────────────────────── auth ───────────────────────────────
+
+  /auth/link/request:
+    post:
+      tags: [auth]
+      summary: Request a magic link
+      description: |
+        `MVP` Sends a sign-in link to the given email address. Always returns `202`,
+        whether or not the address is registered — revealing which addresses exist
+        is an account-enumeration vector.
+
+        `session_challenge` is an opaque value the client generates and retains. If
+        the link is opened on a different device, the landing page falls back to a
+        6-digit code the user types into this session.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, session_challenge]
+              properties:
+                email: { type: string, format: email }
+                session_challenge:
+                  type: string
+                  minLength: 16
+                  maxLength: 128
+                  description: Client-generated opaque value binding the request to this device.
+      responses:
+        '202':
+          description: Link dispatched if the address is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [expires_in]
+                properties:
+                  expires_in: { type: integer, example: 600, description: Seconds until the token expires }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/link/consume:
+    post:
+      tags: [auth]
+      summary: Consume a magic link token
+      description: |
+        `MVP` Exchanges a magic-link token for a session. **POST only** — mail security
+        scanners pre-fetch URLs, so a GET that consumed the token would burn the login
+        before the user tapped it.
+
+        Single-use. A second attempt with the same token returns `410`.
+
+        When `session_challenge` does not match the one from the request, the response
+        is `409` with a `device_code`; the user types that code into the original
+        session, which then calls this endpoint again with `device_code` set.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                session_challenge: { type: string }
+                device_code: { type: string, description: 'Supplied when completing a cross-device sign-in' }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '409':
+          description: Opened on a different device; complete with the returned code
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_code_required]
+                properties:
+                  device_code_required: { type: boolean, const: true }
+                  device_code: { type: string, description: '6-digit code to enter in the original session' }
+        '410': { description: 'Token already used or expired', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/oauth/google:
+    post:
+      tags: [auth]
+      summary: Sign in with Google
+      description: |
+        `MVP` Verifies the Google ID token server-side against Google's JWKS,
+        checking `iss`, `aud`, `nonce`, and `exp`. A client-supplied profile is
+        never trusted.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_token, nonce]
+              properties:
+                id_token: { type: string }
+                nonce: { type: string }
+      responses:
+        '200': { description: 'Signed in', content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/oauth/apple:
+    post:
+      tags: [auth]
+      summary: Sign in with Apple
+      description: |
+        `MVP` Verifies the Apple identity token against Apple's JWKS.
+
+        **`full_name` is returned by Apple only on first authorization.** The client
+        must forward it on that first call; it is unrecoverable afterwards.
+
+        Private-relay addresses (`@privaterelay.appleid.com`) are normal and must not
+        be treated as invalid.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identity_token]
+              properties:
+                identity_token: { type: string }
+                authorization_code: { type: string }
+                full_name: { type: string, description: 'Present only on first authorization' }
+                nonce: { type: string }
+      responses:
+        '200': { description: 'Signed in', content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate the session
+      description: |
+        `MVP` Exchanges a refresh token for a new pair. Refresh tokens rotate on every
+        use. Presenting an already-rotated token revokes the entire family — that is
+        theft detection, and the correct client response is to sign the user out.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { description: 'Rotated', content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Sign out
+      description: '`MVP` Revokes the presented refresh token family.'
+      responses:
+        '204': { description: 'Signed out' }
+
+  /auth/username:
+    post:
+      tags: [auth]
+      summary: Set the username
+      description: '`MVP` The post-signup username step. Usernames are unique, case-insensitive.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: { type: string, minLength: 3, maxLength: 24, pattern: '^[a-zA-Z0-9_.]+$' }
+      responses:
+        '200': { description: 'Set', content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } } }
+        '409': { description: 'Already taken', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ─────────────────────────── profile & consent ───────────────────────────
+
+  /me:
+    get:
+      tags: [profile]
+      summary: Current user
+      description: '`MVP` Profile, quiz state, consent summary, and onboarding progress in one call — used on app launch.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [profile, onboarding, consents]
+                properties:
+                  profile: { $ref: '#/components/schemas/Profile' }
+                  onboarding: { $ref: '#/components/schemas/OnboardingState' }
+                  consents:
+                    type: array
+                    items: { $ref: '#/components/schemas/Consent' }
+    patch:
+      tags: [profile]
+      summary: Update profile
+      description: '`MVP` Partial update. Only supplied fields change.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string, maxLength: 60 }
+                gender_presentation: { $ref: '#/components/schemas/GenderPresentation' }
+                city: { type: string, maxLength: 80 }
+                locale: { type: string, example: 'en-NG' }
+                avatar_asset_id: { type: string, format: uuid }
+      responses:
+        '200': { description: 'Updated', content: { application/json: { schema: { $ref: '#/components/schemas/Profile' } } } }
+
+  /me/body-profile:
+    get:
+      tags: [profile]
+      summary: Get body profile
+      description: |
+        `MVP` `Consent: personalization`
+
+        Sensitive data. Every field is optional and independently omittable. Absent
+        values are returned as `null`, never as guesses.
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/BodyProfile' } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+    put:
+      tags: [profile]
+      summary: Set body profile
+      description: |
+        `MVP` `Consent: personalization`
+
+        Drives hard constraints in look generation — silhouette rules, not vector
+        similarity. Never sent to a model in raw form; `ase` receives abstract
+        constraints such as `favor: defined_waist`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BodyProfile' }
+      responses:
+        '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/BodyProfile' } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /me/consents:
+    get:
+      tags: [profile]
+      summary: List consent state
+      description: '`MVP` Every purpose and its current state. Purposes not yet granted appear with `granted: false`.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Consent' }
+    put:
+      tags: [profile]
+      summary: Grant or revoke a consent purpose
+      description: |
+        `MVP` Revocation takes effect immediately and stops all processing for that
+        purpose. Revoking `ai_processing` disables generation; revoking
+        `pinterest_sync` also revokes the upstream token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, granted, policy_version]
+              properties:
+                purpose: { $ref: '#/components/schemas/ConsentPurpose' }
+                granted: { type: boolean }
+                policy_version: { type: string, example: '2026-08-17' }
+      responses:
+        '200': { description: 'Updated', content: { application/json: { schema: { $ref: '#/components/schemas/Consent' } } } }
+
+  # ──────────────────────────────── quiz ────────────────────────────────
+
+  /quiz:
+    get:
+      tags: [quiz]
+      summary: Get quiz definition
+      description: |
+        `MVP` Questions, options, copy, and layout for the current quiz version.
+
+        **Render option layouts from this response, never from a hardcoded grid.**
+        Q6 has three options where the others have four.
+      security: []
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/QuizDefinition' } } } }
+
+  /quiz/submit:
+    post:
+      tags: [quiz]
+      summary: Submit answers
+      description: |
+        `MVP` Scores synchronously and returns the result immediately. Card rendering
+        is asynchronous — `card_urls.status` will be `pending`; poll `/quiz/card`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quiz_version, answers]
+              properties:
+                quiz_version: { type: string, example: 'dna-2026-08-v1' }
+                answers:
+                  type: object
+                  description: Question id to option id.
+                  additionalProperties: { type: string, pattern: '^[A-E]$' }
+                  example: { '1': A, '2': C, '3': D, '4': A, '5': A, '6': A }
+      responses:
+        '200': { description: 'Scored', content: { application/json: { schema: { $ref: '#/components/schemas/DnaResult' } } } }
+        '409': { description: 'Retake not yet available', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  /quiz/result:
+    get:
+      tags: [quiz]
+      summary: Get current result
+      description: '`MVP`'
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/DnaResult' } } } }
+        '404': { description: 'Quiz not completed', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  /quiz/card:
+    get:
+      tags: [quiz]
+      summary: Get share card URLs
+      description: '`MVP` Returns `status: pending` until the render completes; poll every 2 seconds, up to 30 seconds.'
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/CardUrls' } } } }
+
+  /quiz/retake:
+    post:
+      tags: [quiz]
+      summary: Reset for a retake
+      description: '`MVP` Allowed once per 30 days. `retake_available_at` on the result says when.'
+      responses:
+        '204': { description: 'Reset' }
+        '409': { description: 'Too soon', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ─────────────────────────────── uploads ───────────────────────────────
+
+  /uploads/sign:
+    post:
+      tags: [uploads]
+      summary: Get signed upload credentials
+      description: |
+        `MVP` `Consent: camera_photos`
+
+        Returns short-lived credentials for a direct client-to-CDN upload. The
+        server never proxies image bytes.
+
+        After upload the asset enters the PII pipeline — safety classification, EXIF
+        strip, face redaction, OCR redaction. Until `status` is `ready` the asset
+        cannot be referenced by other endpoints.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, content_type]
+              properties:
+                kind: { type: string, enum: [fabric, vault_item, fit, avatar] }
+                content_type: { type: string, enum: ['image/jpeg', 'image/png', 'image/heic', 'image/webp'] }
+                byte_size: { type: integer, maximum: 20971520, description: 'Maximum 20 MB' }
+      responses:
+        '201':
+          description: Credentials issued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [asset_id, upload_url, expires_at]
+                properties:
+                  asset_id: { type: string, format: uuid }
+                  upload_url: { type: string, format: uri }
+                  fields: { type: object, description: 'Form fields to include with the upload' }
+                  expires_at: { type: string, format: date-time }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /uploads/{asset_id}:
+    get:
+      tags: [uploads]
+      summary: Get asset status
+      description: '`MVP` Poll after uploading. `status` is `processing`, `ready`, or `rejected`.'
+      parameters: [{ $ref: '#/components/parameters/AssetId' }]
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Asset' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ──────────────────────────────── vault ────────────────────────────────
+
+  /vault/items:
+    get:
+      tags: [vault]
+      summary: List vault items
+      description: '`MVP` Cursor-paginated. Categories match the app: tops, bottoms, native, shoes, accessories.'
+      parameters:
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/VaultCategory' } }
+        - { name: q, in: query, schema: { type: string }, description: 'Free-text search over name and notes' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/VaultItem' } }
+    post:
+      tags: [vault]
+      summary: Add a vault item
+      description: '`MVP` The asset must be `ready`. The item is embedded asynchronously and becomes available to generation within seconds.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id, name, category]
+              properties:
+                asset_id: { type: string, format: uuid }
+                name: { type: string, maxLength: 80 }
+                category: { $ref: '#/components/schemas/VaultCategory' }
+                colors: { type: array, items: { type: string }, maxItems: 4 }
+                fabric: { type: string }
+                brand: { type: string }
+                notes: { type: string, maxLength: 500 }
+      responses:
+        '201': { description: 'Created', content: { application/json: { schema: { $ref: '#/components/schemas/VaultItem' } } } }
+
+  /vault/items/{item_id}:
+    parameters: [{ $ref: '#/components/parameters/ItemId' }]
+    get:
+      tags: [vault]
+      summary: Get a vault item
+      description: '`MVP`'
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/VaultItem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [vault]
+      summary: Edit a vault item
+      description: '`MVP`'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 80 }
+                category: { $ref: '#/components/schemas/VaultCategory' }
+                colors: { type: array, items: { type: string } }
+                fabric: { type: string }
+                brand: { type: string }
+                notes: { type: string, maxLength: 500 }
+      responses:
+        '200': { description: 'Updated', content: { application/json: { schema: { $ref: '#/components/schemas/VaultItem' } } } }
+    delete:
+      tags: [vault]
+      summary: Remove a vault item
+      description: '`MVP` Permanent. The app shows a confirmation modal; the server does not.'
+      responses:
+        '204': { description: 'Removed' }
+
+  /vault/items/{item_id}/style:
+    post:
+      tags: [vault]
+      summary: Style this item
+      description: |
+        `MVP` `Consent: ai_processing`
+
+        Starts look generation seeded by this item — the "Style this item" action.
+        Returns a job envelope; see `/looks/jobs/{job_id}`.
+      parameters: [{ $ref: '#/components/parameters/ItemId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                occasion: { $ref: '#/components/schemas/Occasion' }
+                note: { type: string, maxLength: 280 }
+      responses:
+        '202': { description: 'Job accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /vault/wear:
+    post:
+      tags: [vault]
+      summary: Log a wear
+      description: |
+        `MVP` Records what was actually worn. This is the strongest behavioural signal
+        the system has and what the agent learns from — worth prompting for.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_ids, worn_on]
+              properties:
+                item_ids: { type: array, items: { type: string, format: uuid }, minItems: 1 }
+                look_id: { type: string, format: uuid }
+                occasion: { $ref: '#/components/schemas/Occasion' }
+                worn_on: { type: string, format: date }
+      responses:
+        '201': { description: 'Logged' }
+
+  # ──────────────────────────────── looks ────────────────────────────────
+
+  /looks/generate:
+    post:
+      tags: [looks]
+      summary: Generate looks
+      description: |
+        `MVP` `Consent: ai_processing`
+
+        Asynchronous. Returns a job envelope immediately; follow progress over SSE at
+        `stream_url` or by polling `poll_url`.
+
+        Typical completion is 20–45 seconds. Progress states are `queued`,
+        `analyzing`, `assembling`, `rendering`, `done`, `failed`.
+
+        `use_weather` requires `location_weather` consent; without it the request
+        still succeeds and weather is simply not used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source: { type: string, enum: [vault, fabric, prompt] }
+                item_ids: { type: array, items: { type: string, format: uuid }, description: 'Required when source is vault' }
+                fabric_asset_id: { type: string, format: uuid, description: 'Required when source is fabric' }
+                occasion: { $ref: '#/components/schemas/Occasion' }
+                mood: { type: string, maxLength: 60 }
+                note: { type: string, maxLength: 280, description: 'The app''s "Add a note (optional)…" field' }
+                use_weather: { type: boolean, default: false }
+                count: { type: integer, minimum: 1, maximum: 5, default: 3 }
+      responses:
+        '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /looks/jobs/{job_id}:
+    get:
+      tags: [looks]
+      summary: Poll job progress
+      description: '`MVP` Polling fallback for clients that cannot hold an SSE connection. Poll every 2 seconds.'
+      parameters: [{ $ref: '#/components/parameters/JobId' }]
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/JobStatus' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /looks/jobs/{job_id}/stream:
+    get:
+      tags: [looks]
+      summary: Stream job progress (SSE)
+      description: |
+        `MVP` Server-sent events. Event names: `progress`, `done`, `failed`.
+        The connection closes after a terminal event. On disconnect, reconnect or
+        fall back to polling — progress is server-side state, so nothing is lost.
+      parameters: [{ $ref: '#/components/parameters/JobId' }]
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /looks:
+    get:
+      tags: [looks]
+      summary: List looks
+      description: '`MVP` Recent and saved looks, matching the dashboard sections.'
+      parameters:
+        - { name: filter, in: query, schema: { type: string, enum: [recent, saved, all], default: all } }
+        - { name: occasion, in: query, schema: { $ref: '#/components/schemas/Occasion' } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/LookSummary' } }
+
+  /looks/{look_id}:
+    get:
+      tags: [looks]
+      summary: Get a look
+      description: '`MVP` Full detail including items, reasoning, and the "Why this works for you" explanation.'
+      parameters: [{ $ref: '#/components/parameters/LookId' }]
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Look' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /looks/{look_id}/save:
+    post:
+      tags: [looks]
+      summary: Save a look
+      description: '`MVP` Idempotent.'
+      parameters: [{ $ref: '#/components/parameters/LookId' }]
+      responses:
+        '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/Look' } } } }
+    delete:
+      tags: [looks]
+      summary: Unsave a look
+      description: '`MVP`'
+      parameters: [{ $ref: '#/components/parameters/LookId' }]
+      responses:
+        '204': { description: 'Unsaved' }
+
+  /looks/{look_id}/regenerate:
+    post:
+      tags: [looks]
+      summary: Regenerate
+      description: '`MVP` `Consent: ai_processing` Same inputs, excluding the previous result. Returns a new job.'
+      parameters: [{ $ref: '#/components/parameters/LookId' }]
+      responses:
+        '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+
+  /looks/{look_id}/adjust:
+    post:
+      tags: [looks]
+      summary: Adjust a look
+      description: '`MVP` `Consent: ai_processing` The "Adjust" action. Swap an item or change the occasion; returns a new job.'
+      parameters: [{ $ref: '#/components/parameters/LookId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                swap_item_id: { type: string, format: uuid }
+                occasion: { $ref: '#/components/schemas/Occasion' }
+                note: { type: string, maxLength: 280 }
+      responses:
+        '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+
+  /looks/{look_id}/share:
+    post:
+      tags: [looks]
+      summary: Create a share image and link
+      description: '`MVP` Produces a branded share image and a public `faue.app/look/{id}` URL.'
+      parameters: [{ $ref: '#/components/parameters/LookId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                surface: { type: string, enum: [whatsapp, instagram, x, link, other] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [share_url, image_url]
+                properties:
+                  share_url: { type: string, format: uri }
+                  image_url: { type: string, format: uri }
+
+  /looks/{look_id}/feedback:
+    post:
+      tags: [looks]
+      summary: Give feedback
+      description: '`MVP` Feeds the behaviour vector and future ranking. Idempotent per look.'
+      parameters: [{ $ref: '#/components/parameters/LookId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signal]
+              properties:
+                signal: { type: string, enum: [more_like_this, not_my_style] }
+                reason: { type: string, maxLength: 200 }
+      responses:
+        '204': { description: 'Recorded' }
+
+  # ─────────────────────────────── fabric ───────────────────────────────
+
+  /fabric/{asset_id}/style:
+    post:
+      tags: [fabric]
+      summary: Get style suggestions for a fabric
+      description: |
+        `MVP` `Consent: ai_processing`
+
+        Classifies the fabric and returns 3–5 native styles suited to it, each with
+        reasoning specific to this fabric and accessory pairings.
+
+        Style selection here is rules-first — a wrong match costs the user money at a
+        tailor. The model classifies and explains; it does not choose.
+      parameters: [{ $ref: '#/components/parameters/AssetId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fabric_type: { $ref: '#/components/schemas/FabricType', description: 'Overrides detection when the user corrects it' }
+                occasion: { $ref: '#/components/schemas/Occasion' }
+                gender_presentation: { $ref: '#/components/schemas/GenderPresentation' }
+                constraints: { type: array, items: { type: string }, example: [modest, stand_out] }
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/FabricAnalysis' } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /fabric/{asset_id}/tailor-share:
+    post:
+      tags: [fabric]
+      summary: Create a tailor-ready share image
+      description: |
+        `MVP` Composites the fabric photograph, the chosen style reference, the user's
+        notes, and FAUE branding into one image suitable for WhatsApp.
+      parameters: [{ $ref: '#/components/parameters/AssetId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [style_id]
+              properties:
+                style_id: { type: string, format: uuid }
+                notes: { type: string, maxLength: 500, description: 'Measurements or instructions for the tailor' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [image_url]
+                properties:
+                  image_url: { type: string, format: uri }
+
+  # ──────────────────────────────── spree ────────────────────────────────
+
+  /spree/sessions:
+    post:
+      tags: [spree]
+      summary: Start a styling conversation
+      description: '`MVP` `Consent: ai_processing`'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session_id]
+                properties:
+                  session_id: { type: string, format: uuid }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /spree/sessions/{session_id}/messages:
+    post:
+      tags: [spree]
+      summary: Send a message
+      description: |
+        `MVP` `Consent: ai_processing`
+
+        Streams the reply as SSE. Images must be `ready` assets.
+
+        Off-topic or unsafe input returns a templated refusal without a model call —
+        that is expected behaviour, not an error.
+      parameters: [{ $ref: '#/components/parameters/SessionId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string, maxLength: 1000 }
+                asset_ids: { type: array, items: { type: string, format: uuid }, maxItems: 3 }
+      responses:
+        '200': { description: 'SSE stream of the reply', content: { text/event-stream: { schema: { type: string } } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /spree/sessions/{session_id}:
+    get:
+      tags: [spree]
+      summary: Get conversation history
+      description: '`MVP` Retention is TTL-bounded; older messages may be absent.'
+      parameters: [{ $ref: '#/components/parameters/SessionId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session_id, messages]
+                properties:
+                  session_id: { type: string, format: uuid }
+                  messages: { type: array, items: { $ref: '#/components/schemas/SpreeMessage' } }
+
+  # ──────────────────────────────── agent ────────────────────────────────
+
+  /agent/today:
+    get:
+      tags: [agent]
+      summary: Today's suggestion
+      description: |
+        `MVP` `Consent: personalization`
+
+        The dashboard's "What are you wearing today?" content. Returns the current
+        suggestion, generating one on demand if none exists for today.
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/AgentSuggestion' } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /agent/settings:
+    get:
+      tags: [agent]
+      summary: Get agent settings
+      description: '`M1-2`'
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/AgentSettings' } } } }
+    put:
+      tags: [agent]
+      summary: Update agent settings
+      description: '`M1-2` `Consent: agent_proactive` for daily suggestions.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentSettings' }
+      responses:
+        '200': { description: 'Updated', content: { application/json: { schema: { $ref: '#/components/schemas/AgentSettings' } } } }
+
+  /agent/suggestions/{run_id}/respond:
+    post:
+      tags: [agent]
+      summary: Respond to a suggestion
+      description: '`MVP` Accept, dismiss, or request another. Feeds agent memory.'
+      parameters: [{ name: run_id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [accepted, dismissed, regenerate] }
+      responses:
+        '204': { description: 'Recorded' }
+
+  # ───────────────────────────── integrations ─────────────────────────────
+
+  /integrations:
+    get:
+      tags: [integrations]
+      summary: List connected accounts
+      description: '`MVP` Backs the Connected Accounts screen. Instagram is not offered — the platform API cannot deliver what it would promise.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Integration' }
+
+  /integrations/pinterest/authorize:
+    get:
+      tags: [integrations]
+      summary: Begin Pinterest connection
+      description: '`MVP` `Consent: pinterest_sync` Returns an OAuth2 + PKCE authorization URL. Read-only scopes only.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorize_url, state]
+                properties:
+                  authorize_url: { type: string, format: uri }
+                  state: { type: string }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+
+  /integrations/pinterest/callback:
+    get:
+      tags: [integrations]
+      summary: OAuth callback
+      description: '`MVP` Called by Pinterest. Exchanges the code, stores encrypted tokens, and redirects back into the app.'
+      security: []
+      parameters:
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+      responses:
+        '302': { description: 'Redirect into the app' }
+
+  /integrations/pinterest/boards:
+    get:
+      tags: [integrations]
+      summary: List boards
+      description: '`MVP` The user chooses which boards to import. Never import everything by default.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PinterestBoard' }
+
+  /integrations/pinterest/import:
+    post:
+      tags: [integrations]
+      summary: Import selected boards
+      description: '`MVP` Asynchronous. Pins are cached through the PII pipeline and embedded into the aspiration vector.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [board_ids]
+              properties:
+                board_ids: { type: array, items: { type: string }, minItems: 1 }
+      responses:
+        '202': { description: 'Import started', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+
+  /integrations/{provider}:
+    delete:
+      tags: [integrations]
+      summary: Disconnect
+      description: '`MVP` Revokes the upstream token, deletes cached pins, and removes the aspiration vector.'
+      parameters: [{ name: provider, in: path, required: true, schema: { type: string, enum: [pinterest] } }]
+      responses:
+        '204': { description: 'Disconnected' }
+
+  # ───────────────────────────── notifications ─────────────────────────────
+
+  /notifications:
+    get:
+      tags: [notifications]
+      summary: Notification inbox
+      description: '`MVP` Backs the Notification screen. `category` maps to its All / Style / Activity tabs.'
+      parameters:
+        - { name: category, in: query, schema: { type: string, enum: [style, activity] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    required: [items, unread_count]
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/InboxItem' } }
+                      unread_count: { type: integer }
+
+  /notifications/{notification_id}/read:
+    post:
+      tags: [notifications]
+      summary: Mark as read
+      description: '`MVP`'
+      parameters: [{ name: notification_id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: 'Marked' }
+
+  /notifications/preferences:
+    get:
+      tags: [notifications]
+      summary: Get preferences
+      description: '`MVP` Per category and channel, plus quiet hours.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/NotificationPreference' }
+    put:
+      tags: [notifications]
+      summary: Update preferences
+      description: '`MVP`'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/NotificationPreference' }
+      responses:
+        '200': { description: 'Updated' }
+
+  /notifications/devices:
+    post:
+      tags: [notifications]
+      summary: Register a device token
+      description: '`MVP` Tokens are deleted on logout and on account deletion.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, token]
+              properties:
+                platform: { type: string, enum: [ios, android, web] }
+                token: { type: string }
+      responses:
+        '201': { description: 'Registered' }
+
+  # ─────────────────────────────── privacy ───────────────────────────────
+
+  /privacy/export:
+    post:
+      tags: [privacy]
+      summary: Request a data export
+      description: '`MVP` Asynchronous. Produces a downloadable archive of everything held about the user.'
+      responses:
+        '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+
+  /privacy/delete:
+    post:
+      tags: [privacy]
+      summary: Delete the account
+      description: |
+        `MVP` Irreversible. Fans out deletion across every module and third party, with
+        a 30-day completion SLA.
+
+        Required by the App Store for any app offering Sign in with Apple, so this is
+        launch-blocking rather than optional.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm: { type: boolean, const: true }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '202':
+          description: Deletion started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ledger_id, sla_due_at]
+                properties:
+                  ledger_id: { type: string, format: uuid }
+                  sla_due_at: { type: string, format: date-time }
+
+  /privacy/restrict:
+    post:
+      tags: [privacy]
+      summary: Restrict processing
+      description: '`MVP` Pauses all optional processing while retaining the account.'
+      responses:
+        '204': { description: 'Restricted' }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token, 15-minute lifetime. Rotate via `/auth/refresh`.
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: Opaque cursor from the previous page's `next_cursor`.
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    AssetId:
+      name: asset_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ItemId:
+      name: item_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LookId:
+      name: look_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid, or expired credentials
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Not found
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After: { schema: { type: integer }, description: 'Seconds to wait' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ConsentRequired:
+      description: |
+        A required consent purpose has not been granted. Present the consent surface
+        for the purpose named in `errors[0].field`, not a generic error.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+
+    Problem:
+      type: object
+      description: RFC 7807 problem document.
+      required: [type, title, status]
+      properties:
+        type: { type: string, example: 'consent_required', description: Stable machine-readable code. Branch on this, never on `title`. }
+        title: { type: string, example: 'Consent required' }
+        status: { type: integer, example: 403 }
+        detail: { type: string, description: 'Human-readable', safe to log, never shown raw to users }
+        instance: { type: string, description: 'Trace id for support' }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              code: { type: string }
+              message: { type: string }
+
+    Page:
+      type: object
+      required: [next_cursor, has_more]
+      properties:
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+
+    Session:
+      type: object
+      required: [access_token, refresh_token, expires_in, is_new_user]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, example: 900 }
+        is_new_user: { type: boolean }
+
+    Profile:
+      type: object
+      required: [user_id, username]
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: [string, 'null'] }
+        display_name: { type: [string, 'null'] }
+        gender_presentation: { $ref: '#/components/schemas/GenderPresentation' }
+        city: { type: [string, 'null'] }
+        locale: { type: string, example: 'en-NG' }
+        avatar_url: { type: [string, 'null'], format: uri }
+        created_at: { type: string, format: date-time }
+
+    OnboardingState:
+      type: object
+      description: Drives which onboarding step the app resumes at.
+      required: [username_set, quiz_completed, pinterest_connected, vault_started, body_profile_set]
+      properties:
+        username_set: { type: boolean }
+        quiz_completed: { type: boolean }
+        pinterest_connected: { type: boolean }
+        vault_started: { type: boolean }
+        body_profile_set: { type: boolean }
+
+    GenderPresentation:
+      type: [string, 'null']
+      enum: [feminine, masculine, fluid, prefer_not_to_say, null]
+
+    BodyProfile:
+      type: object
+      description: |
+        Sensitive. Every field optional. Encrypted at rest, never sent raw to a model —
+        `ase` receives abstract silhouette constraints instead.
+      properties:
+        body_shape: { type: [string, 'null'], enum: [hourglass, pear, rectangle, inverted_triangle, apple, triangle, oval, null] }
+        height_cm: { type: [integer, 'null'], minimum: 100, maximum: 250 }
+        fit_preference: { type: [string, 'null'], enum: [fitted, regular, relaxed, null] }
+        sizes_by_category:
+          type: object
+          additionalProperties: { type: string }
+          example: { tops: M, bottoms: '32', shoes: '43' }
+        measurements:
+          type: [object, 'null']
+          description: Optional expansion. Absent for most users.
+          additionalProperties: { type: number }
+
+    Consent:
+      type: object
+      required: [purpose, granted]
+      properties:
+        purpose: { $ref: '#/components/schemas/ConsentPurpose' }
+        granted: { type: boolean }
+        policy_version: { type: [string, 'null'] }
+        granted_at: { type: [string, 'null'], format: date-time }
+
+    ConsentPurpose:
+      type: string
+      enum: [essential, personalization, ai_processing, pinterest_sync, camera_photos, location_weather, agent_proactive, marketing_comms, analytics]
+
+    QuizDefinition:
+      type: object
+      required: [quiz_version, questions]
+      properties:
+        quiz_version: { type: string, example: 'dna-2026-08-v1' }
+        questions:
+          type: array
+          items:
+            type: object
+            required: [id, prompt, options]
+            properties:
+              id: { type: integer }
+              prompt: { type: string }
+              subtitle: { type: [string, 'null'] }
+              progress: { type: integer, description: 'Percentage to show on this screen' }
+              options:
+                type: array
+                description: Length varies by question — Q6 has three. Build the layout from this.
+                items:
+                  type: object
+                  required: [id, label]
+                  properties:
+                    id: { type: string, example: 'A' }
+                    label: { type: string, example: 'Minimal' }
+                    description: { type: string }
+                    image_url: { type: [string, 'null'], format: uri }
+
+    DnaResult:
+      type: object
+      required: [quiz_version, dominant, scores, completed_at]
+      properties:
+        quiz_version: { type: string }
+        dominant: { $ref: '#/components/schemas/PersonaResult' }
+        alter_ego: { oneOf: [{ $ref: '#/components/schemas/PersonaResult' }, { type: 'null' }] }
+        wildcard: { oneOf: [{ $ref: '#/components/schemas/PersonaResult' }, { type: 'null' }] }
+        tagline:
+          type: string
+          description: 'Tier 1 persona line. Fixed per persona.'
+        blend_line:
+          type: string
+          description: 'Tier 2. Varies by dominant x alter-ego pair; 30 hand-written variants.'
+        personal_line:
+          type: [string, 'null']
+          description: 'Tier 3 (M1-2). Generated once from the answer pattern, then frozen. Null when absent — close the layout up rather than leaving a gap.'
+        scores:
+          type: object
+          description: Raw scores per persona id. Display uses the percentages on each persona.
+          additionalProperties: { type: number }
+        card_urls: { $ref: '#/components/schemas/CardUrls' }
+        completed_at: { type: string, format: date-time }
+        retake_available_at: { type: string, format: date-time }
+
+    PersonaResult:
+      type: object
+      required: [id, name, percentage]
+      properties:
+        id: { type: string, enum: [CM, OR, SL, SC, CE, NF] }
+        name: { type: string, example: 'The Cultural Minimalist' }
+        percentage: { type: integer, description: 'Percentages across shown personas total exactly 100' }
+        gradient_from: { type: string, example: '#0F3D2E' }
+        gradient_to: { type: string, example: '#355C4F' }
+
+    CardUrls:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [pending, ready, failed] }
+        square_url: { type: [string, 'null'], format: uri }
+        stories_url: { type: [string, 'null'], format: uri }
+
+    Asset:
+      type: object
+      required: [asset_id, status]
+      properties:
+        asset_id: { type: string, format: uuid }
+        status: { type: string, enum: [processing, ready, rejected] }
+        url: { type: [string, 'null'], format: uri, description: 'The redacted derivative. The original is not exposed.' }
+        rejection_reason: { type: [string, 'null'], enum: [unsafe_content, not_apparel, unreadable, too_large, null] }
+
+    VaultCategory:
+      type: string
+      enum: [tops, bottoms, native, shoes, accessories]
+
+    VaultItem:
+      type: object
+      required: [item_id, name, category, image_url, created_at]
+      properties:
+        item_id: { type: string, format: uuid }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/VaultCategory' }
+        colors: { type: array, items: { type: string } }
+        fabric: { type: [string, 'null'] }
+        brand: { type: [string, 'null'] }
+        notes: { type: [string, 'null'] }
+        image_url: { type: string, format: uri }
+        wear_count: { type: integer }
+        last_worn_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    Occasion:
+      type: [string, 'null']
+      enum: [owambe, wedding, corporate, casual, date_night, church, travel, custom, null]
+
+    JobEnvelope:
+      type: object
+      required: [job_id, status, poll_url]
+      properties:
+        job_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued] }
+        poll_url: { type: string, format: uri }
+        stream_url: { type: [string, 'null'], format: uri }
+        estimated_seconds: { type: integer, example: 30 }
+
+    JobStatus:
+      type: object
+      required: [job_id, status, progress]
+      properties:
+        job_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, analyzing, assembling, rendering, done, failed] }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        label: { type: string, example: 'Building your fit…' }
+        result:
+          type: [object, 'null']
+          properties:
+            look_ids: { type: array, items: { type: string, format: uuid } }
+        error:
+          type: [object, 'null']
+          properties:
+            reason_code: { type: string, enum: [empty_pool, model_unavailable, render_failed, budget_exceeded, guardrail_blocked, timeout, internal] }
+            message: { type: string, description: 'User-safe copy matching the designed error state' }
+
+    LookSummary:
+      type: object
+      required: [look_id, title, image_url, created_at]
+      properties:
+        look_id: { type: string, format: uuid }
+        title: { type: string, example: 'Cultural Evening Flow' }
+        image_url: { type: string, format: uri }
+        occasion: { $ref: '#/components/schemas/Occasion' }
+        is_saved: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    Look:
+      allOf:
+        - $ref: '#/components/schemas/LookSummary'
+        - type: object
+          required: [items, description]
+          properties:
+            description: { type: string, description: 'The look''s summary paragraph' }
+            why_this_works: { type: [string, 'null'], description: 'Personalised explanation referencing the user''s Style DNA' }
+            generated_by_ai: { type: boolean, description: 'When true the app shows the "generated by FAUE AI" attribution' }
+            renderer: { type: string, enum: [generative, composite, hybrid] }
+            items:
+              type: array
+              items:
+                type: object
+                required: [name, role]
+                properties:
+                  name: { type: string, example: 'Relaxed Linen Shirt' }
+                  role: { type: string, example: 'top' }
+                  vault_item_id: { type: [string, 'null'], format: uuid, description: 'Present when the piece is one the user owns' }
+                  image_url: { type: [string, 'null'], format: uri }
+                  note: { type: [string, 'null'] }
+
+    FabricType:
+      type: string
+      enum: [ankara, lace, aso_oke, adire, cotton, chiffon, other]
+
+    FabricAnalysis:
+      type: object
+      required: [asset_id, detected_type, confidence, styles]
+      properties:
+        asset_id: { type: string, format: uuid }
+        detected_type: { $ref: '#/components/schemas/FabricType' }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        attributes:
+          type: object
+          properties:
+            motif_scale: { type: string, enum: [small, medium, large] }
+            weight: { type: string, enum: [light, medium, heavy] }
+            dominant_colors: { type: array, items: { type: string } }
+        styles:
+          type: array
+          minItems: 3
+          maxItems: 5
+          items:
+            type: object
+            required: [style_id, name, reason]
+            properties:
+              style_id: { type: string, format: uuid }
+              name: { type: string, example: 'Fitted Kaftan with Side Slit' }
+              reference_image_url: { type: string, format: uri }
+              reason: { type: string, description: 'Why this style suits this specific fabric' }
+              formality: { type: string, enum: [casual, smart_casual, formal, ceremonial] }
+              accessories:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    image_url: { type: [string, 'null'], format: uri }
+                    note: { type: string }
+
+    SpreeMessage:
+      type: object
+      required: [role, content, created_at]
+      properties:
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+        image_urls: { type: array, items: { type: string, format: uri } }
+        refused: { type: boolean, description: 'True when a guardrail produced a templated refusal' }
+        created_at: { type: string, format: date-time }
+
+    AgentSuggestion:
+      type: object
+      required: [run_id, look, trigger, generated_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        look: { $ref: '#/components/schemas/LookSummary' }
+        trigger: { type: string, enum: [daily, weather, event, proactive, on_demand] }
+        rationale: { type: string, description: 'Answers "why this?" from stored facts', not a fresh model guess }
+        weather:
+          type: [object, 'null']
+          properties:
+            temp_c: { type: number }
+            condition: { type: string }
+            rain_probability: { type: number }
+            dust_index: { type: [number, 'null'], description: 'Harmattan season dust level' }
+        generated_at: { type: string, format: date-time }
+
+    AgentSettings:
+      type: object
+      properties:
+        daily_enabled: { type: boolean }
+        daily_hour_local: { type: integer, minimum: 0, maximum: 23 }
+        use_weather: { type: boolean }
+        autonomy_level: { type: integer, minimum: 0, maximum: 3, description: '0 on-open, 1 daily push, 2 proactive triggers, 3 planning' }
+
+    Integration:
+      type: object
+      required: [provider, connected]
+      properties:
+        provider: { type: string, enum: [pinterest] }
+        connected: { type: boolean }
+        connected_at: { type: [string, 'null'], format: date-time }
+        last_sync_at: { type: [string, 'null'], format: date-time }
+        boards_imported: { type: integer }
+        pins_imported: { type: integer }
+        status: { type: string, enum: [active, needs_reauth, revoked, syncing] }
+
+    PinterestBoard:
+      type: object
+      required: [board_id, name, pin_count]
+      properties:
+        board_id: { type: string }
+        name: { type: string }
+        pin_count: { type: integer }
+        cover_image_url: { type: [string, 'null'], format: uri }
+        imported: { type: boolean }
+
+    InboxItem:
+      type: object
+      required: [notification_id, title, category, created_at, read]
+      properties:
+        notification_id: { type: string, format: uuid }
+        title: { type: string, example: 'New Style Generated' }
+        body: { type: string, example: 'Your Crimson Elegance look is ready to explore' }
+        category: { type: string, enum: [style, activity] }
+        deeplink: { type: [string, 'null'], format: uri }
+        image_url: { type: [string, 'null'], format: uri }
+        read: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    NotificationPreference:
+      type: object
+      required: [category, channel, enabled]
+      properties:
+        category: { type: string, enum: [style, activity, marketing] }
+        channel: { type: string, enum: [push, email, whatsapp, sms, inbox] }
+        enabled: { type: boolean }
+        quiet_hours_start: { type: [integer, 'null'], minimum: 0, maximum: 23 }
+        quiet_hours_end: { type: [integer, 'null'], minimum: 0, maximum: 23 }

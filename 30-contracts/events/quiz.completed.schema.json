@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.faue.app/events/quiz.completed.schema.json",
+  "title": "quiz.completed",
+  "description": "Stage: MVP. Producer: gateway. Consumers: ase, media, notify, analytics.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "name",
+    "version",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUIDv7. Consumers deduplicate on this."
+    },
+    "name": {
+      "const": "quiz.completed"
+    },
+    "version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the fact became true, not when published."
+    },
+    "producer": {
+      "const": "gateway"
+    },
+    "user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "quiz_version": {
+          "type": "string"
+        },
+        "dominant": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "alter_ego": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "wildcard": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "scores": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "is_retake": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "quiz_version",
+        "dominant",
+        "scores",
+        "is_retake"
+      ]
+    }
+  }
+}
