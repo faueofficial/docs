@@ -58,7 +58,9 @@ The session lands on the device that started the flow, which is what the user ex
 
 ### Deliverability
 
-Login depends on email arriving. That makes SPF, DKIM, and DMARC on the sending domain an operational requirement, not a nicety, and the sending domain should be a subdomain (`mail.faue.app`) so a reputation problem never affects the apex. See [`../70-ops/environments.md`](../70-ops/environments.md).
+Login depends on email arriving. Delivery is **Resend**, sending from the subdomain `mail.faue.app` so a reputation problem never affects the apex. SPF, DKIM and DMARC on that subdomain are an operational requirement, not a nicety.
+
+Resend allows 2 requests per second on the default plan, so a signup burst can be rate-limited upstream. The client should treat a `503` on link request as retryable, not as a rejected address.
 
 ---
 

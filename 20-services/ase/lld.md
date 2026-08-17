@@ -90,6 +90,12 @@ Computed, not asked of the model:
 
 Supplied to the stylist as measured fact. The model then judges what a distance metric cannot: whether the combination reads correctly for an Owambe, whether the proportions work, whether the print scale fights the cut.
 
+### Matching against items the user owns
+
+When the stylist proposes a piece, the system checks whether the user already owns something close enough to use instead. Cosine similarity **above 0.85** flags the owned item and substitutes it into the look.
+
+That threshold is deliberately high: suggesting "wear the shirt you already own" is only valuable when it is actually the right shirt. A near-miss is worse than no match, because the user opens their wardrobe and finds something that does not work.
+
 ### Stage 3b — the stylist pass
 
 The model receives the pool with attributes, the colour prior, the style context, the occasion, weather if permitted, and the user's note. It returns ordered looks composed of pool item identifiers, with per-look rationale.

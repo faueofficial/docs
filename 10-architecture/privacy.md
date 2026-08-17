@@ -160,7 +160,7 @@ Every processor is listed publicly as a sub-processor. Each requires a data proc
 | Model provider (via OpenRouter) | Sanitised text, redacted images | `ai_processing` |
 | Image generation provider | Constructed prompts — never user images | `ai_processing` |
 | Cloudinary / object storage | Redacted image derivatives | `camera_photos` |
-| Transactional email | Email address | Contract |
+| Resend (transactional email) | Email address | Contract |
 | FCM / APNs | Device tokens | Contract |
 | PostHog | Pseudonymous analytics events | `analytics` |
 | Open-Meteo | Coarse geohash — no user identifier | `location_weather` |

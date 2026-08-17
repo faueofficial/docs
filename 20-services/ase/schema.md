@@ -102,7 +102,27 @@ CREATE TABLE ase.product_embeddings (      -- M1-2
 );
 ```
 
-The partial index per `model_id` is what keeps a migration from bloating one index with vectors nobody queries. Dimension is a column rather than a constraint because different providers differ — 768 for open-CLIP, 1024 for Voyage, 3072 for Gemini-class.
+The partial index per `model_id` is what keeps a migration from bloating one index with vectors nobody queries. Dimension is a column rather than a constraint because different providers differ — 768 for open-CLIP ViT-L/14, 512 for ViT-B/32, 1024 for Voyage, 3072 for Gemini-class.
+
+> **pgvector cannot index a dimensionless column.** `CREATE INDEX ... USING hnsw (embedding ...)` on a bare `vector` column fails with `column does not have dimensions`. The index therefore **casts in an expression** and is partial on `model_id`:
+>
+> ```sql
+> CREATE INDEX idx_vault_emb_hnsw_cliplarge ON ase.vault_embeddings
+>   USING hnsw ((embedding::vector(768)) vector_cosine_ops)
+>   WITH (m = 16, ef_construction = 64)
+>   WHERE model_id = 'open_clip/ViT-L-14-336';
+> ```
+>
+> **Queries must repeat the same cast to hit the index:**
+>
+> ```sql
+> SELECT item_id FROM ase.vault_embeddings
+> WHERE model_id = 'open_clip/ViT-L-14-336'
+> ORDER BY embedding::vector(768) <=> $1::vector(768)
+> LIMIT 40;
+> ```
+>
+> A query without the cast silently falls back to a sequential scan — correct results, unusable latency. This was found by running the migration, not by reading the documentation.
 
 ---
 

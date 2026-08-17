@@ -95,4 +95,9 @@ The workspace root is **not** a git repository. Every directory beneath it is a 
 - A document with `TBD` in it is not finished. Write the answer or write down why it cannot be answered yet, and who decides.
 - Decisions go in `80-adr/`, not in prose scattered across documents. If you are explaining *why* for the third time, it wants an ADR.
 
+> **Reconciliation open.** An earlier architecture document from this repository's
+> remote (`90-meta/legacy/01_SYSTEM_ARCHITECTURE.md`) uses different service names
+> and topology. The conflicts are listed in [`90-meta/reconciliation.md`](90-meta/reconciliation.md)
+> and need a decision before the naming in these documents is final.
+
 **Source specification:** [`superpowers/specs/2026-08-17-faue-platform-architecture-design.md`](superpowers/specs/2026-08-17-faue-platform-architecture-design.md) — the approved design every document here elaborates.
