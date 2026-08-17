@@ -194,7 +194,8 @@ Stored already redacted, so a database dump contains no PII.
 |---|---|---|---|---|
 | OpenRouter → model providers | Language model inference | Redacted text and images | Varies — zero-retention allowlist | Required |
 | Image generation provider | Look rendering | Constructed prompts only | TBD at selection | Required |
-| Cloudinary / object storage | Image storage and CDN | Redacted derivatives | Global CDN | Required |
+| Cloudinary | Primary image storage, CDN, transforms | Redacted derivatives | Global CDN | Required |
+| Cloudflare R2 | Backup replica of derivatives | Redacted derivatives | Configurable region | Required |
 | Resend | Magic links, transactional email | Email address | US/EU | Required |
 | FCM / APNs | Push delivery | Device tokens | Global | Standard terms |
 | PostHog | Product analytics | Pseudonymous events | EU or self-hosted | Required |

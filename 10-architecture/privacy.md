@@ -159,7 +159,8 @@ Every processor is listed publicly as a sub-processor. Each requires a data proc
 |---|---|---|
 | Model provider (via OpenRouter) | Sanitised text, redacted images | `ai_processing` |
 | Image generation provider | Constructed prompts — never user images | `ai_processing` |
-| Cloudinary / object storage | Redacted image derivatives | `camera_photos` |
+| Cloudinary (primary storage + CDN) | Redacted image derivatives | `camera_photos` |
+| Cloudflare R2 (backup replica) | Redacted image derivatives | `camera_photos` |
 | Resend (transactional email) | Email address | Contract |
 | FCM / APNs | Device tokens | Contract |
 | PostHog | Pseudonymous analytics events | `analytics` |

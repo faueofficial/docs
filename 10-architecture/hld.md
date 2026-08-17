@@ -29,7 +29,7 @@ graph TB
         OR[OpenRouter<br/>LLM routing]
         IMG[Image generation<br/>provider]
         PIN[Pinterest API]
-        CDN[Cloudinary / object storage]
+        CDN[Cloudinary CDN<br/>R2 backup]
         WX[Open-Meteo]
         MAIL[Transactional email]
         PUSH[FCM / APNs]
@@ -171,7 +171,7 @@ One PostgreSQL cluster, schema per service, **no cross-schema foreign keys** —
 | pgvector (in `ase`) | Vector similarity for style, fabric, vault, and aspiration embeddings |
 | Redis | Cache, rate limiting, magic-link and OTP storage, semantic model cache, job progress |
 | RabbitMQ | `faue.events` topic exchange, one durable queue per consumer, dead-letter per queue |
-| Object storage / CDN | User images, renders, share cards |
+| Object storage / CDN | User images, renders, share cards. **Cloudinary primary** (CDN + transforms), **Cloudflare R2** backup replica, Railway object storage for local and staging — all behind one `StorageProvider` interface so the primary is configuration, not an assumption in upload code |
 
 Migrations live in one Alembic project inside `faue-db`, which also holds the SQLAlchemy models for every schema. Model and migration land together, enforced in CI. Ownership is preserved by `CODEOWNERS` per schema directory and by PostgreSQL roles granted only on their own schema, so cross-schema access fails at the database rather than by convention. Full rationale in [`20-services/faue-db.md`](../20-services/faue-db.md).
 

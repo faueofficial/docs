@@ -97,6 +97,9 @@ Retention is cohorted weekly. A single blended number hides that the cohort afte
 | Cost per generated look | ≤ $0.05 |
 | Model fallback depth | ≤ 1 sustained |
 | Semantic cache hit rate | ≥ 40% |
+| **CDN bandwidth** | Track against Cloudinary's 25 GB/month free tier |
+
+**Bandwidth, not storage, is the binding constraint on images.** A vault grid is many small requests on metered connections. Storage will sit comfortably inside the free tier long after bandwidth stops doing so, and approaching the bandwidth cap is the trigger to move primary storage to R2 — a copy job, because uploads already go through the `StorageProvider` interface.
 
 Cost per generated look is the number that decides whether generative rendering stays the default. If it rises above the target, the answer is the composite renderer, not a smaller budget for everything else.
 

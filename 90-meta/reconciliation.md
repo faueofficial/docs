@@ -82,19 +82,22 @@ These are better than what the current documents had, and are being folded in:
 |---|---|---|
 | ~~1~~ | ~~`ase` or `archive` + `atelier`?~~ | **Closed** — `ase` ([ADR 0022](../80-adr/0022-canonical-domain-and-service-naming.md)) |
 | ~~2~~ | ~~If split: where does the vector index live?~~ | **Moot** — no split |
-| 3 | Storage: Cloudinary, R2, or object storage on Railway? | **OPEN** — see below |
+| ~~3~~ | ~~Storage: Cloudinary, R2, or Railway?~~ | **Closed** — Cloudinary primary, R2 backup, Railway for local/staging |
 | 4 | Is "Occasion Routing" a distinct gateway module, or part of look generation? | OPEN — low stakes, decide when building |
 
-### 3. Storage — still open
+### 3. Storage — resolved
 
-The legacy document assumes S3/R2 presigned URLs; the current documents say "Cloudinary or S3-compatible". The decision matters more than it looks, because FAUE is image-heavy and its users are on **metered Nigerian mobile data**, which makes egress cost and CDN proximity product concerns rather than infrastructure ones.
+**Cloudinary primary, Cloudflare R2 as the backup replica, Railway object storage for local and staging.** All three behind one `StorageProvider` interface.
 
-Constraints any answer has to satisfy:
+| Tier | Role | Why |
+|---|---|---|
+| Cloudinary | Primary — storage, CDN, transforms | Free tier covers the first few hundred users; on-the-fly variants remove a pipeline step; CDN is the requirement metered mobile data imposes |
+| Cloudflare R2 | Backup replica | Different provider from the primary, matching the rule already applied to database backups. Zero egress makes restore cheap |
+| Railway object storage | Local and staging | Already wired. Nobody's phone downloads from it, so no CDN is needed |
 
-- **A CDN close to users.** Serving images from a single origin region is slow and costs users money.
-- **Durability.** Vectors are derived and rebuildable; a user's photographs are not.
-- **Sized variants.** A vault grid must not download full-resolution renders. Either the store transforms on the fly, or the pipeline pre-generates variants.
-- **Egress cost.** The dominant variable cost of an image-heavy product.
+**The watch item is egress, not storage.** Cloudinary's free tier is 25 GB of storage and 25 GB of bandwidth a month. Storage will not be the binding constraint — bandwidth will, because a vault grid is many small image requests on metered connections. Track bandwidth as a first-class metric, and treat approaching the cap as the trigger to move primary to R2, which is a copy job rather than a rewrite because uploads already go through the interface.
+
+Mitigation regardless of provider: request sized variants, never full resolution for a thumbnail; never prefetch generated renders on a metered connection.
 
 ---
 

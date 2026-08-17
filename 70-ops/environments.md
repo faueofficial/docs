@@ -88,7 +88,7 @@ Railway. Topology and procedure in [`deployment.md`](deployment.md).
 | Redis | Railway plugin |
 | RabbitMQ | Template or CloudAMQP |
 | `faue-web`, `faue-admin` | Vercel |
-| Object storage | Cloudinary or S3-compatible |
+| Object storage | Cloudinary (primary) · Cloudflare R2 (backup) |
 
 ---
 
