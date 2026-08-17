@@ -50,7 +50,7 @@ providers:
     require_no_train: true
     headers:
       X-Title: FAUE
-      HTTP-Referer: https://faue.app
+      HTTP-Referer: https://faueofficial.com
 
 tiers:
   reasoning:  ["<primary>", "<fallback-1>", "<fallback-2>"]

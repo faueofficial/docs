@@ -33,7 +33,7 @@ openapi-generator generate \
   -g dart-dio -o lib/api
 
 # staging
-BASE_URL=https://staging-api.faue.app/v1
+BASE_URL=https://staging-api.faueofficial.com/v1
 ```
 
 Ask me for a staging test account. For any endpoint not yet built, send `X-Mock-Mode: true` and you will get recorded fixtures — build the screen now, switch the header off when the flow lands.

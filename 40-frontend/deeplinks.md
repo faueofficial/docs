@@ -8,16 +8,16 @@ Sharing is FAUE's growth loop, and a share that opens a broken page breaks it. E
 
 ## 1. URL scheme
 
-Canonical domain: `https://faue.app`. Everything routes through HTTPS links — no custom `faue://` scheme, which cannot be shared into WhatsApp usefully and shows a scary dialog when the app is absent.
+Canonical domain: `https://faueofficial.com`. Everything routes through HTTPS links — no custom `faue://` scheme, which cannot be shared into WhatsApp usefully and shows a scary dialog when the app is absent.
 
 | URL | Opens in app | Web fallback |
 |---|---|---|
-| `https://faue.app/auth/verify?t=…` | `/auth/verify` | Sign-in confirmation page |
-| `https://faue.app/dna/{share_id}` | `/quiz/result` (own) or a viewer | Public Style DNA card page |
-| `https://faue.app/look/{share_id}` | `/looks/{id}` | Public look page |
-| `https://faue.app/style/{style_id}` | `/styles/{id}` | Public style page |
-| `https://faue.app/invite/{code}` | onboarding with attribution | Landing page |
-| `https://faue.app/n/{notification_id}` | target of the notification | Landing page |
+| `https://faueofficial.com/auth/verify?t=…` | `/auth/verify` | Sign-in confirmation page |
+| `https://faueofficial.com/dna/{share_id}` | `/quiz/result` (own) or a viewer | Public Style DNA card page |
+| `https://faueofficial.com/look/{share_id}` | `/looks/{id}` | Public look page |
+| `https://faueofficial.com/style/{style_id}` | `/styles/{id}` | Public style page |
+| `https://faueofficial.com/invite/{code}` | onboarding with attribution | Landing page |
+| `https://faueofficial.com/n/{notification_id}` | target of the notification | Landing page |
 
 Share ids are **not** internal object ids. They are separate, unguessable, and revocable, so unsharing actually works and nobody can enumerate looks by incrementing a number.
 
@@ -25,13 +25,13 @@ Share ids are **not** internal object ids. They are separate, unguessable, and r
 
 ## 2. Universal Links (iOS)
 
-`faue-web` serves, at `https://faue.app/.well-known/apple-app-site-association`, with `Content-Type: application/json` and **no** `.json` extension:
+`faue-web` serves, at `https://faueofficial.com/.well-known/apple-app-site-association`, with `Content-Type: application/json` and **no** `.json` extension:
 
 ```json
 {
   "applinks": {
     "details": [{
-      "appIDs": ["TEAMID.app.faue.ios"],
+      "appIDs": ["TEAMID.com.faueofficial.app"],
       "components": [
         { "/": "/auth/verify", "?": { "t": "?*" } },
         { "/": "/dna/*" },
@@ -45,7 +45,7 @@ Share ids are **not** internal object ids. They are separate, unguessable, and r
 }
 ```
 
-The app declares `applinks:faue.app` in its Associated Domains entitlement.
+The app declares `applinks:faueofficial.com` in its Associated Domains entitlement.
 
 Gotchas that cost a day each if unknown: the file must be served over HTTPS with no redirect; iOS caches it aggressively, so changes need an app reinstall to test reliably; and a Universal Link tapped from within Safari on the same domain will not open the app — test from Messages or Notes instead.
 
@@ -53,14 +53,14 @@ Gotchas that cost a day each if unknown: the file must be served over HTTPS with
 
 ## 3. App Links (Android)
 
-`https://faue.app/.well-known/assetlinks.json`:
+`https://faueofficial.com/.well-known/assetlinks.json`:
 
 ```json
 [{
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "app.faue.android",
+    "package_name": "com.faueofficial.app",
     "sha256_cert_fingerprints": ["<release signing cert SHA-256>"]
   }
 }]
@@ -75,7 +75,7 @@ Manifest:
   <action android:name="android.intent.action.VIEW" />
   <category android:name="android.intent.category.DEFAULT" />
   <category android:name="android.intent.category.BROWSABLE" />
-  <data android:scheme="https" android:host="faue.app" />
+  <data android:scheme="https" android:host="faueofficial.com" />
 </intent-filter>
 ```
 
@@ -98,8 +98,8 @@ Every public page carries OG and Twitter card tags, since these links are pasted
 ```html
 <meta property="og:title"       content="Seagatoo's Style DNA — The Cultural Minimalist" />
 <meta property="og:description" content="Discover your FAUE Style DNA." />
-<meta property="og:image"       content="https://cdn.faue.app/cards/{share_id}/square.png" />
-<meta property="og:url"         content="https://faue.app/dna/{share_id}" />
+<meta property="og:image"       content="https://cdn.faueofficial.com/cards/{share_id}/square.png" />
+<meta property="og:url"         content="https://faueofficial.com/dna/{share_id}" />
 <meta name="twitter:card"       content="summary_large_image" />
 ```
 
@@ -124,7 +124,7 @@ Use the native share sheet with **both** an image and a URL — recipients on Wh
 ```dart
 await Share.shareXFiles(
   [XFile(cardImagePath)],
-  text: 'My FAUE Style DNA — The Cultural Minimalist\nhttps://faue.app/dna/$shareId',
+  text: 'My FAUE Style DNA — The Cultural Minimalist\nhttps://faueofficial.com/dna/$shareId',
 );
 ```
 

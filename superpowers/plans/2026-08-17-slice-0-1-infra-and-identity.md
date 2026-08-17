@@ -1094,7 +1094,7 @@ sends a real message.
 
 Login depends on email arriving, which makes SPF, DKIM and DMARC on the sending
 subdomain an operational requirement rather than a nicety. Use a subdomain
-(`mail.faue.app`) so a reputation problem never affects the apex.
+(`mail.faueofficial.com`) so a reputation problem never affects the apex.
 """
 
 from __future__ import annotations
@@ -1194,7 +1194,7 @@ def build_sender(settings: Any) -> EmailSender:
 |---|---|
 | API key is `re_...` | Store as `RESEND_API_KEY`; never in the repo |
 | Rate limit 2 req/sec on the default plan | A signup burst will 429. The magic-link limiter caps per identifier, but a global burst is still possible — retry with backoff |
-| `from` domain must be verified in Resend | Verify `mail.faue.app` and add its SPF/DKIM records before the first real send |
+| `from` domain must be verified in Resend | Verify `mail.faueofficial.com` and add its SPF/DKIM records before the first real send |
 | `Idempotency-Key` supported | Pass it, so a retry after a timeout cannot double-send |
 | Test mode addresses | `delivered@resend.dev` and `bounced@resend.dev` exercise both paths on staging |
 
@@ -1273,7 +1273,7 @@ async def request_link(
 
     # the digest doubles as the idempotency key: unique per token, stable on retry
     await sender.send_magic_link(
-        identifier, f"https://faue.app/auth/verify?t={raw}", idempotency_key=digest
+        identifier, f"https://faueofficial.com/auth/verify?t={raw}", idempotency_key=digest
     )
 ```
 
@@ -1628,7 +1628,7 @@ async def test_apple_private_relay_address_is_accepted(stub_jwks):
     """xyz@privaterelay.appleid.com is a real, working address."""
     token = jwt.encode(
         {
-            "iss": "https://appleid.apple.com", "aud": "app.faue.ios",
+            "iss": "https://appleid.apple.com", "aud": "com.faueofficial.app",
             "sub": "apple-user-456", "email": "xyz@privaterelay.appleid.com",
             "email_verified": "true", "nonce": "test-nonce",
             "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
@@ -1637,7 +1637,7 @@ async def test_apple_private_relay_address_is_accepted(stub_jwks):
     )
 
     class AppleSettings:
-        apple_client_id = "app.faue.ios"
+        apple_client_id = "com.faueofficial.app"
 
     identity = await oidc_apple.verify_apple(
         token, nonce="test-nonce", full_name="Amara O", settings=AppleSettings()
@@ -1650,7 +1650,7 @@ async def test_apple_full_name_is_only_present_on_first_authorization(stub_jwks)
     """Apple sends it once. If it is not captured then, it is gone permanently."""
     token = jwt.encode(
         {
-            "iss": "https://appleid.apple.com", "aud": "app.faue.ios",
+            "iss": "https://appleid.apple.com", "aud": "com.faueofficial.app",
             "sub": "apple-user-456", "email": "a@b.com", "nonce": "test-nonce",
             "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
         },
@@ -1658,7 +1658,7 @@ async def test_apple_full_name_is_only_present_on_first_authorization(stub_jwks)
     )
 
     class AppleSettings:
-        apple_client_id = "app.faue.ios"
+        apple_client_id = "com.faueofficial.app"
 
     identity = await oidc_apple.verify_apple(
         token, nonce="test-nonce", full_name=None, settings=AppleSettings()
@@ -2475,19 +2475,19 @@ async def test_request_shape_matches_the_resend_api(monkeypatch):
         captured["body"] = request.read().decode()
         return httpx.Response(200, json={"id": "re_123"})
 
-    sender = ResendEmailSender("re_test", "mail.faue.app")
+    sender = ResendEmailSender("re_test", "mail.faueofficial.com")
     monkeypatch.setattr(
         httpx, "AsyncClient",
         lambda **kw: httpx.AsyncClient(transport=transport(handler), **kw),
     )
 
-    await sender.send_magic_link("a@b.com", "https://faue.app/auth/verify?t=x",
+    await sender.send_magic_link("a@b.com", "https://faueofficial.com/auth/verify?t=x",
                                  idempotency_key="abc123")
 
     assert captured["url"] == "https://api.resend.com/emails"
     assert captured["auth"] == "Bearer re_test"
     assert captured["idempotency"] == "abc123"
-    assert "mail.faue.app" in captured["body"]
+    assert "mail.faueofficial.com" in captured["body"]
 
 
 async def test_rate_limit_surfaces_as_service_unavailable(monkeypatch):
@@ -2496,7 +2496,7 @@ async def test_rate_limit_surfaces_as_service_unavailable(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, json={"message": "Too many requests"})
 
-    sender = ResendEmailSender("re_test", "mail.faue.app")
+    sender = ResendEmailSender("re_test", "mail.faueofficial.com")
     monkeypatch.setattr(
         httpx, "AsyncClient",
         lambda **kw: httpx.AsyncClient(transport=transport(handler), **kw),
@@ -2510,7 +2510,7 @@ async def test_network_failure_surfaces_as_service_unavailable(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no route to host")
 
-    sender = ResendEmailSender("re_test", "mail.faue.app")
+    sender = ResendEmailSender("re_test", "mail.faueofficial.com")
     monkeypatch.setattr(
         httpx, "AsyncClient",
         lambda **kw: httpx.AsyncClient(transport=transport(handler), **kw),
@@ -2521,8 +2521,8 @@ async def test_network_failure_surfaces_as_service_unavailable(monkeypatch):
 
 
 def test_the_email_contains_the_link_and_an_expiry_notice():
-    html = render_magic_link_email("https://faue.app/auth/verify?t=abc")
-    assert "https://faue.app/auth/verify?t=abc" in html
+    html = render_magic_link_email("https://faueofficial.com/auth/verify?t=abc")
+    assert "https://faueofficial.com/auth/verify?t=abc" in html
     assert "10 minutes" in html
 ```
 
@@ -2530,7 +2530,7 @@ def test_the_email_contains_the_link_and_an_expiry_notice():
 
 Login depends on delivery, so this is launch-blocking:
 
-1. Add `mail.faue.app` as a domain in Resend.
+1. Add `mail.faueofficial.com` as a domain in Resend.
 2. Publish the SPF, DKIM and DMARC records Resend provides. Use the **subdomain**, so a reputation problem never touches the apex domain.
 3. Wait for verification, then send a real test to a Gmail address and confirm it lands in the inbox rather than spam.
 4. On staging, verify both paths with `delivered@resend.dev` and `bounced@resend.dev`.

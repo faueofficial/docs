@@ -1,6 +1,6 @@
 # Reconciliation — legacy architecture vs. current design
 
-**Status:** OPEN — needs a decision · **Raised:** 2026-08-17
+**Status:** PARTIALLY CLOSED · **Raised:** 2026-08-17 · **Naming resolved:** 2026-08-17 ([ADR 0022](../80-adr/0022-canonical-domain-and-service-naming.md))
 **Sources:** [`legacy/01_SYSTEM_ARCHITECTURE.md`](legacy/01_SYSTEM_ARCHITECTURE.md) (from the `docs` remote) vs. [`../10-architecture/hld.md`](../10-architecture/hld.md)
 
 The `docs` remote contained an earlier architecture document written independently of the platform design produced from the Figma file and the design session. Both are considered work. This page lists where they disagree, what was adopted, and what still needs a call.
@@ -24,7 +24,9 @@ The legacy split is defensible: `archive` owns storage and embeddings, `atelier`
 
 **Argument for splitting them (legacy):** storage and vectorisation are I/O and batch shaped; generation is compute and latency shaped. They scale differently.
 
-**What needs deciding:** `ase` or `archive` + `atelier`. If the split wins, `ADR 0001` is superseded and the schema, ports, repo names and roughly 40 documents change. Cheap now, expensive in three months.
+**RESOLVED — `ase` retained.** See [ADR 0022](../80-adr/0022-canonical-domain-and-service-naming.md).
+
+The deciding argument: the semantic matcher sits on the **hot path of every generation**. Splitting `archive` from `atelier` puts a network hop inside the loop the product is built around. The pressure the split anticipates is real, and the seams already exist — `spree` is documented as extractable, and `catalog` and `media` are designed as separate services for exactly the batch and CPU-spiky work the legacy document was separating out.
 
 ---
 
@@ -42,7 +44,7 @@ Three-way conflict, and the user-facing name is the one that matters most:
 | Service | `archive` | — | `ase` |
 | Table | `wardrobe_items` | — | `vault_items` |
 
-**Recommendation:** keep **Vault** in the interface, because the design uses it and the app is what users read. The service name is a separate question — a service called `archive` can perfectly well own a table called `vault_items`.
+**RESOLVED — Vault.** The design uses it across seven screens and the app is what users read. The table stays `vault_items`.
 
 ---
 
@@ -76,12 +78,23 @@ These are better than what the current documents had, and are being folded in:
 
 ## 5. Genuinely open
 
-| # | Question | Blocks |
+| # | Question | Status |
 |---|---|---|
-| 1 | `ase`, or `archive` + `atelier`? | Repo names, schema names, ~40 documents. **Decide before slice 2** |
-| 2 | If split: does the vector index live with storage or with generation? | The hot path of every generation |
-| 3 | Storage: Cloudinary, or S3/R2 as the legacy doc assumes? | `media` module, presigned upload flow |
-| 4 | Is "Occasion Routing" a distinct gateway module, or part of look generation? | Module layout |
+| ~~1~~ | ~~`ase` or `archive` + `atelier`?~~ | **Closed** — `ase` ([ADR 0022](../80-adr/0022-canonical-domain-and-service-naming.md)) |
+| ~~2~~ | ~~If split: where does the vector index live?~~ | **Moot** — no split |
+| 3 | Storage: Cloudinary, R2, or object storage on Railway? | **OPEN** — see below |
+| 4 | Is "Occasion Routing" a distinct gateway module, or part of look generation? | OPEN — low stakes, decide when building |
+
+### 3. Storage — still open
+
+The legacy document assumes S3/R2 presigned URLs; the current documents say "Cloudinary or S3-compatible". The decision matters more than it looks, because FAUE is image-heavy and its users are on **metered Nigerian mobile data**, which makes egress cost and CDN proximity product concerns rather than infrastructure ones.
+
+Constraints any answer has to satisfy:
+
+- **A CDN close to users.** Serving images from a single origin region is slow and costs users money.
+- **Durability.** Vectors are derived and rebuildable; a user's photographs are not.
+- **Sized variants.** A vault grid must not download full-resolution renders. Either the store transforms on the fly, or the pipeline pre-generates variants.
+- **Egress cost.** The dominant variable cost of an image-heavy product.
 
 ---
 

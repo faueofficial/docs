@@ -25,9 +25,9 @@ info:
     email: hello@databackedafrica.com
 
 servers:
-  - url: https://api.faue.app/v1
+  - url: https://api.faueofficial.com/v1
     description: Production
-  - url: https://staging-api.faue.app/v1
+  - url: https://staging-api.faueofficial.com/v1
     description: Staging (fixtures available via X-Mock-Mode)
   - url: http://localhost:8000/v1
     description: Local
@@ -740,7 +740,7 @@ paths:
     post:
       tags: [looks]
       summary: Create a share image and link
-      description: '`MVP` Produces a branded share image and a public `faue.app/look/{id}` URL.'
+      description: '`MVP` Produces a branded share image and a public `faueofficial.com/look/{id}` URL.'
       parameters: [{ $ref: '#/components/parameters/LookId' }]
       requestBody:
         content:

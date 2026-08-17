@@ -22,7 +22,7 @@ sequenceDiagram
     GW->>GW: rate limit (per identifier, per IP)
     GW->>GW: mint 32-byte opaque token
     GW->>R: store SHA-256(token) → {email, challenge, ttl 10m, used=false}
-    GW->>M: send link https://faue.app/auth/verify?t=<token>
+    GW->>M: send link https://faueofficial.com/auth/verify?t=<token>
     GW-->>App: 202 Accepted {expires_in: 600}
 
     Note over App: App polls or waits on deep link

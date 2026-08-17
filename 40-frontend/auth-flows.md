@@ -16,7 +16,7 @@ The default path. The user types an email address and receives a link.
 2  POST /auth/link/request { email, session_challenge }
    → 202 { expires_in: 600 }              always 202, even for unknown addresses
 3  show "check your email" screen with a resend cooldown
-4  user taps the link → https://faue.app/auth/verify?t=<token>
+4  user taps the link → https://faueofficial.com/auth/verify?t=<token>
 5a app installed  → universal/app link opens the app at /auth/verify
 5b not installed  → faue-web renders a page with an explicit "Sign in" button
 6  POST /auth/link/consume { token, session_challenge }
@@ -58,7 +58,7 @@ The session lands on the device that started the flow, which is what the user ex
 
 ### Deliverability
 
-Login depends on email arriving. Delivery is **Resend**, sending from the subdomain `mail.faue.app` so a reputation problem never affects the apex. SPF, DKIM and DMARC on that subdomain are an operational requirement, not a nicety.
+Login depends on email arriving. Delivery is **Resend**, sending from the subdomain `mail.faueofficial.com` so a reputation problem never affects the apex. SPF, DKIM and DMARC on that subdomain are an operational requirement, not a nicety.
 
 Resend allows 2 requests per second on the default plan, so a signup burst can be rate-limited upstream. The client should treat a `503` on link request as retryable, not as a rejected address.
 

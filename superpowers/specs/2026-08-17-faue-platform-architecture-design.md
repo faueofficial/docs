@@ -113,7 +113,7 @@ Providers: email **magic link**, Google (OIDC), Apple (Sign in with Apple).
 ```
 POST /v1/auth/link/request  → rate limit (per identifier + per IP) → mint opaque 32-byte token,
                               store hashed, TTL 10m, single-use, one active per identifier
-                              → email link https://faue.app/auth/verify?t=…  (universal/app link)
+                              → email link https://faueofficial.com/auth/verify?t=…  (universal/app link)
 POST /v1/auth/link/consume  → consume token → upsert user → access JWT (15m) + rotating refresh (30d)
 POST /v1/auth/oauth/google  → verify id_token server-side (iss, aud, nonce)
 POST /v1/auth/oauth/apple   → verify identity token; capture name on first authorization only

@@ -7,8 +7,8 @@
 ## 1. Topology
 
 ```
-Vercel                 faue-web (faue.app)  ·  faue-admin (admin.faue.app, network-gated)
-Railway  public        api-gateway (api.faue.app)
+Vercel                 faue-web (faueofficial.com)  ·  faue-admin (admin.faueofficial.com, network-gated)
+Railway  public        api-gateway (api.faueofficial.com)
 Railway  private       ase  ·  workers  ·  postgres+pgvector  ·  redis  ·  rabbitmq
 External               object storage + CDN  ·  email  ·  push  ·  model providers
 ```

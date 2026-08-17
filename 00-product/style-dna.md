@@ -293,7 +293,7 @@ Rendered by the media module on `quiz.completed`, in square (1080×1080) and sto
 │   "[tier 2 — blend line]"           │
 │   "[tier 3 — personal line, M1-2]"  │
 │                                     │
-│            faue.app/dna             │
+│            faueofficial.com/dna             │
 └─────────────────────────────────────┘
 ```
 

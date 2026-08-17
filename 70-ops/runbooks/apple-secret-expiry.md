@@ -11,7 +11,7 @@ Sign in with Apple requires an ES256 client secret JWT with a **hard six-month m
 ```bash
 python -m scripts.generate_apple_secret \
   --team-id $APPLE_TEAM_ID --key-id $APPLE_KEY_ID \
-  --client-id app.faue.ios --private-key-path ./AuthKey.p8 --months 6
+  --client-id com.faueofficial.app --private-key-path ./AuthKey.p8 --months 6
 ```
 
 Set the result as `APPLE_CLIENT_SECRET` in the secret store and redeploy the gateway.

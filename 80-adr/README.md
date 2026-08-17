@@ -27,3 +27,4 @@ ADRs are immutable once accepted. A decision changes by writing a new ADR that s
 | [0019](0019-remove-instagram-integration.md) | Remove the Instagram integration | Low |
 | [0020](0020-style-library-licensed-not-scraped.md) | Style library imagery is licensed or generated, never scraped | High if violated |
 | [0021](0021-workspace-tenancy-model.md) | Workspace tenancy from the first migration | Low |
+| [0022](0022-canonical-domain-and-service-naming.md) | Canonical domain faueofficial.com; `ase` retained | Moderate |

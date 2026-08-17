@@ -136,7 +136,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | 1 | Persona taxonomy and quiz option copy need review and sign-off | Quiz implementation, share-card design | shared |
 | 2 | Generative image provider selection (cost, latency, African fashion fidelity, commercial terms) | Renderer implementation | backend |
 | 3 | Style library licensing outreach — which tailors, who owns the conversation | Style library content | content |
-| ~~4~~ | ~~Transactional email provider~~ — **resolved: Resend**. Remaining: verify `mail.faue.app` and publish SPF/DKIM/DMARC | Launch (operational) | backend |
+| ~~4~~ | ~~Transactional email provider~~ — **resolved: Resend**. Remaining: verify `mail.faueofficial.com` and publish SPF/DKIM/DMARC | Launch (operational) | backend |
 | 5 | Phone OTP timing — confirm no launch market needs it before M1-2 | Nothing currently | backend |
 | 6 | Tailor segment reachability — validate with 5 tailors before building anything | Professional track (Y2) | shared |
 | 7 | Delegated consent design (client → stylist, partial and revocable) | Professional track (Y2) | backend |

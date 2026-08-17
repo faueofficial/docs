@@ -6,8 +6,8 @@
 
 ```bash
 railway status --service api-gateway
-curl -sf https://api.faue.app/healthz || echo "process down"
-curl -s  https://api.faue.app/readyz  | jq
+curl -sf https://api.faueofficial.com/healthz || echo "process down"
+curl -s  https://api.faueofficial.com/readyz  | jq
 ```
 
 `healthz` failing = the process is down. `readyz` failing alone = a dependency is unreachable; `readyz` names which.
