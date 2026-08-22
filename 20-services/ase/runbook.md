@@ -8,7 +8,7 @@
 
 ```bash
 source .venv/bin/activate
-uvicorn app.main:app --reload --port 8001
+uvicorn app.main:create_app --factory --reload --port 8001
 
 # workers
 arq app.workers.WorkerSettings            # generation, rendering, embedding

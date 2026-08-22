@@ -58,7 +58,25 @@ The session lands on the device that started the flow, which is what the user ex
 
 ### Deliverability
 
-Login depends on email arriving. Delivery is **Resend**, sending from the subdomain `mail.faueofficial.com` so a reputation problem never affects the apex.
+Login depends on email arriving. Delivery is **Resend**, sending from the subdomain `faueofficial.com` so a reputation problem never affects the apex.
+
+> **Resend's root-domain DNS layout looks wrong and is not.** For a root sending
+> domain, DKIM goes on the domain itself while SPF and MX go on a `send.`
+> subdomain:
+>
+> ```
+> resend._domainkey.faueofficial.com   TXT   DKIM — proves ownership, signs mail
+> send.faueofficial.com                TXT   SPF  — the MAIL FROM / return path
+> send.faueofficial.com                MX          bounce handling
+> _dmarc.faueofficial.com              TXT   DMARC
+> ```
+>
+> `send.faueofficial.com` is where **bounces** go, not where mail comes from. The
+> from-address stays on the apex: `hello@faueofficial.com`. Reading the split as a
+> misplaced record and "fixing" it breaks verification.
+>
+> `api-gateway/scripts/check_email_dns.py` checks all four against a public
+> resolver.
 
 > **Two different addresses, and they cannot be the same one.** The public contact
 > address is `faueofficial@gmail.com`. The magic-link **sending** address must be on

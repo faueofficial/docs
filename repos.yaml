@@ -6,11 +6,11 @@
 
 version: 1
 org: faueofficial
-remote_base: git@github.com:faueofficial
+remote_base: https://github.com/faueofficial
 
 repos:
   - dir: docs
-    repo: faue-platform
+    repo: docs
     stack: markdown
     stage: MVP
     owner: backend
@@ -86,7 +86,7 @@ repos:
       Internal operations console. Separate deployment, separate auth realm,
       network-gated.
 
-  - dir: infra
+  - dir: faue-infra
     repo: faue-infra
     stack: compose-ci
     stage: MVP

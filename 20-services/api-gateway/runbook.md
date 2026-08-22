@@ -9,7 +9,7 @@
 ```bash
 # local
 source .venv/bin/activate
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:create_app --factory --reload --port 8000
 
 # workers (separate processes)
 arq app.workers.WorkerSettings

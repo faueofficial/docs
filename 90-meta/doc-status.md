@@ -1,6 +1,6 @@
 # Documentation Status
 
-**Updated:** 2026-08-17 · **Consistency sweep:** passed (99 files, 0 broken links, vocabulary verified) · **Repo cleanup:** complete
+**Updated:** 2026-08-22 · **Build status:** [`build-status.md`](build-status.md) · **Consistency sweep:** passed (99 files, 0 broken links, vocabulary verified) · **Repo cleanup:** complete
 
 Status values: `done` (written and verified) · `draft` (written, needs review) · `planned` (task exists, not written) · `deferred` (deliberately not written yet, with a reason).
 
@@ -53,6 +53,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | `ase/runbook.md` | MVP | backend | done |
 | `faue-db.md` | MVP | backend | done |
 | `faue-core.md` | MVP | backend | done |
+| `shared-packages.md` | MVP | backend | done |
 | `admin.md` | MVP | backend | done |
 | `catalog/*` | M1-2 | backend | deferred — bounded module inside ase until extraction |
 | `media/*` | M1-2 | backend | deferred — bounded module inside gateway until extraction |
@@ -91,6 +92,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | `style-library.md` | MVP | content | done |
 | `curation-guide.md` | MVP | content | done |
 | `labeling-guide.md` | MVP | content | done |
+| `email-assets.md` | MVP | design | done — **artwork not yet produced** |
 | `catalog-model.md` | M1-2 | content | done |
 
 ## 60-ai
@@ -117,7 +119,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 
 | Document | Stage | Owner | Status |
 |---|---|---|---|
-| `0001` – `0021` | all | backend | done |
+| `0001` – `0022` | all | backend | done |
 
 ## 90-meta
 
@@ -126,6 +128,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | `conventions.md` | all | backend | done |
 | `glossary.md` | all | shared | done |
 | `doc-status.md` | all | backend | done |
+| `build-status.md` | all | backend | done |
 
 ---
 
@@ -136,7 +139,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | 1 | Persona taxonomy and quiz option copy need review and sign-off | Quiz implementation, share-card design | shared |
 | 2 | Generative image provider selection (cost, latency, African fashion fidelity, commercial terms) | Renderer implementation | backend |
 | 3 | Style library licensing outreach — which tailors, who owns the conversation | Style library content | content |
-| ~~4~~ | ~~Transactional email provider~~ — **resolved: Resend**. Remaining: verify `mail.faueofficial.com` and publish SPF/DKIM/DMARC | Launch (operational) | backend |
+| ~~4~~ | ~~Transactional email provider~~ — **resolved: Resend**. Remaining: verify `faueofficial.com` and publish SPF/DKIM/DMARC | Launch (operational) | backend |
 | 10 | Public contact address is `faueofficial@gmail.com` for now. A domain address (`hello@faueofficial.com`) is worth having before launch — a Gmail contact on a privacy policy and a regulator notification reads as unestablished | Launch (soft) | backend |
 | 5 | Phone OTP timing — confirm no launch market needs it before M1-2 | Nothing currently | backend |
 | 6 | Tailor segment reachability — validate with 5 tailors before building anything | Professional track (Y2) | shared |

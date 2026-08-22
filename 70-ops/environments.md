@@ -21,8 +21,8 @@ Services run **directly under uvicorn**, not in containers. Disk and memory on a
 ```bash
 source .venv/bin/activate
 
-uvicorn app.main:app --reload --port 8000   # api-gateway
-uvicorn app.main:app --reload --port 8001   # ase
+uvicorn app.main:create_app --factory --reload --port 8000   # api-gateway
+uvicorn app.main:create_app --factory --reload --port 8001   # ase
 # 8002 catalog (M1-2), 8003 media (M1-2)
 
 arq app.workers.WorkerSettings              # workers, separate process
@@ -184,3 +184,47 @@ What the frontend engineer needs, in order:
 5. `screens.md` and `design-tokens.md`.
 
 He needs no backend repository access and no local backend running. That is deliberate — if he does, the handoff documentation has failed.
+
+---
+
+## 9. How `.env` is read
+
+`pydantic-settings` reads `.env` for the `Settings` class **only**. Anything
+using `os.environ` directly — Alembic's `env.py`, the email preview script, a
+one-off worker — would see nothing, and the failure is a confusing "missing
+`DATABASE_URL`" in a shell where `.env` is sitting right there.
+
+`faue_core.config.load_env()` fixes that once, for everything. It is called
+before any `Settings` instance exists, and by Alembic and the scripts.
+
+### Precedence
+
+```
+real environment          ← always wins
+  └─ <service>/.env       ← overrides the shared file
+       └─ <workspace>/.env  ← values common to every service
+```
+
+Two properties, both deliberate:
+
+**The real environment always wins.** That is what makes the same code work
+locally, where values come from a file, and on Railway, where the platform
+injects them and no file exists. No branch, no `if ENVIRONMENT ==`.
+
+**A nearer `.env` overrides a further one.** The workspace file holds what every
+service shares; a service file overrides it. This needs the files to be *merged*
+before being applied — loading them in sequence with `override=False` would also
+stop the nearer file winning, which is the wrong precedence and an easy bug to
+ship.
+
+The walk stops at the workspace root, identified by `docs/repos.yaml`, so it
+never continues into a home directory and reads an unrelated `.env`.
+
+### Rules
+
+- `.env` is git-ignored in every repository. `.env.example` documents every
+  variable and is committed.
+- A missing `.env` is not an error — Railway has none.
+- `faue_core.config.require("NAME", hint="...")` reads a required variable and
+  fails with the variable name and where to put it, rather than a `KeyError`
+  three frames into a request.

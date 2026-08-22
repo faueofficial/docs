@@ -2,7 +2,7 @@
 
 Single source of truth for how FAUE is built. If code and this documentation disagree, one of them is a bug — say which in a pull request rather than letting them drift.
 
-**Repository:** `faue-platform` · **Workspace directory:** `docs/`
+**Repository:** `docs` · **Workspace directory:** `docs/`
 
 ---
 
@@ -95,9 +95,9 @@ The workspace root is **not** a git repository. Every directory beneath it is a 
 - A document with `TBD` in it is not finished. Write the answer or write down why it cannot be answered yet, and who decides.
 - Decisions go in `80-adr/`, not in prose scattered across documents. If you are explaining *why* for the third time, it wants an ADR.
 
-> **Reconciliation open.** An earlier architecture document from this repository's
-> remote (`90-meta/legacy/01_SYSTEM_ARCHITECTURE.md`) uses different service names
-> and topology. The conflicts are listed in [`90-meta/reconciliation.md`](90-meta/reconciliation.md)
-> and need a decision before the naming in these documents is final.
+> **Reconciliation closed.** An earlier architecture document from this repository's
+> remote is retained at `90-meta/legacy/01_SYSTEM_ARCHITECTURE.md` with a supersession
+> banner. Every conflict is resolved — see [`90-meta/reconciliation.md`](90-meta/reconciliation.md)
+> and [ADR 0022](80-adr/0022-canonical-domain-and-service-naming.md).
 
 **Source specification:** [`superpowers/specs/2026-08-17-faue-platform-architecture-design.md`](superpowers/specs/2026-08-17-faue-platform-architecture-design.md) — the approved design every document here elaborates.

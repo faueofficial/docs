@@ -85,7 +85,13 @@ while IFS=$'\t' read -r dir repo stage base; do
 
   if [[ "$MODE" == "status" ]]; then
     if [[ -d "$target/.git" ]]; then
-      branch="$(git -C "$target" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+      # symbolic-ref, not rev-parse: on a repository with no commits yet
+      # rev-parse still prints "HEAD" before failing, so the fallback appends
+      # to it and the line renders across two rows.
+      branch="$(git -C "$target" symbolic-ref --short -q HEAD || echo '?')"
+      if ! git -C "$target" rev-parse -q --verify HEAD >/dev/null; then
+        branch="$branch, no commits"
+      fi
       if [[ -n "$(git -C "$target" status --porcelain 2>/dev/null)" ]]; then
         red   "  dirty    $dir ($branch)"
       else
