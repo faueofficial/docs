@@ -145,6 +145,16 @@ Railway wins at launch because operational time is the scarcer resource. Revisit
 
 Every service ships `.env.example` documenting every variable. A missing required variable fails at startup, loudly.
 
+Cryptographic values are generated, never invented:
+
+```bash
+python faue-infra/scripts/generate_secrets.py --write
+```
+
+It fills empty slots only and refuses to replace one that is set, because
+`SERVICE_JWT_SECRET` has to match across `api-gateway` and `ase` and
+`ENCRYPTION_MASTER_KEY` cannot be replaced without the rotation procedure.
+
 Differences that matter across environments:
 
 | Variable | local | staging | prod |

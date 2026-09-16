@@ -306,7 +306,11 @@ CREATE TABLE gateway.notify_deliveries (
   delivered_at   TIMESTAMPTZ,
   opened_at      TIMESTAMPTZ,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, template_id, event_id)
+  -- `channel` is part of the key because one row IS one channel. Without it the
+  -- first channel to claim an event locks out every other, so a message meant
+  -- for inbox and email only ever reached whichever ran first — and the table
+  -- recorded that as correct deduplication.
+  UNIQUE (user_id, template_id, event_id, channel)
 );
 
 CREATE TABLE gateway.notify_inbox (
@@ -332,7 +336,7 @@ CREATE TABLE gateway.notify_devices (
 );
 ```
 
-The `UNIQUE (user_id, template_id, event_id)` constraint on deliveries is what makes redelivery safe: a replayed event cannot produce a second push.
+The `UNIQUE (user_id, template_id, event_id, channel)` constraint on deliveries is what makes redelivery safe: a replayed event cannot produce a second push on the same channel. `channel` belongs in the key — a row *is* one channel, and leaving it out silently reduced every multi-channel message to whichever channel ran first.
 
 ---
 

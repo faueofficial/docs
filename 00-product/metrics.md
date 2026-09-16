@@ -1,6 +1,6 @@
 # Metrics
 
-**Stage:** MVP · **Dashboards:** [`../70-ops/observability.md`](../70-ops/observability.md)
+**Stage:** MVP · **Requirements:** [`prd.md`](prd.md) · **Dashboards:** [`../70-ops/observability.md`](../70-ops/observability.md)
 
 What is measured, what the thresholds are, and what would tell us we are wrong.
 

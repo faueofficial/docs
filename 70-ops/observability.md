@@ -57,6 +57,38 @@ Structured JSON, always carrying `trace_id`, `service`, `environment`, and `user
 | `INFO` | A state change worth reconstructing |
 | `DEBUG` | Local only |
 
+### Outcomes
+
+Most operations here can half-succeed: a notification reaches the inbox but not
+email, a relay pass publishes eight of ten rows. A boolean calls all of those
+`true`, and nobody investigates a `true`.
+
+`faue_core.telemetry.outcome.Outcome` makes the middle state expressible:
+
+| Status | `ok` | `degraded` | Level |
+|---|---|---|---|
+| `success` | yes | no | `INFO` |
+| `partial` | yes | **yes** | `WARNING` |
+| `failure` | no | yes | `ERROR` |
+
+The level is derived from the status rather than chosen by the caller, so a
+failure cannot be logged at `INFO` and quietly leave the error rate.
+
+A partial outcome must name what was skipped and why; a failure must carry a
+reason. Both are validated against `^[a-z][a-z0-9_]{2,48}$` — dashboards group
+by these values, and a free-text sentence produces one bucket per incident,
+which is the same as no grouping.
+
+Reason codes are deliberately **not** scrubbed. The scrubber is key-based, and
+`email` is a delivery channel as well as a PII field name, so scrubbing turned
+`{"email": "no_verified_address"}` into `{"email": "[redacted]"}` — deleting the
+only part of the line that said what went wrong. The regex is what makes that
+safe: no address or phone number can match it.
+
+An HTTP 4xx is `partial`, not `failure`. The request was refused for a stated
+reason, which is the system working; counting it as an error buries the 5xx that
+need someone.
+
 Exceptions are logged once, at the boundary that handles them. Re-logging on the way up produces duplicate alerts and makes error rates meaningless.
 
 Retention 30 days.

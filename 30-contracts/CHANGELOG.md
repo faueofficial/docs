@@ -16,6 +16,43 @@ Format: newest first. Each entry states the change, its type, and what a consume
 
 ---
 
+## 2026-09-02 — Uploads are not direct-to-CDN
+
+| Change | Type | Consumer action |
+|---|---|---|
+| `POST /uploads/sign` returns an upload URL on **our** domain, not CDN credentials | `changed` | `PUT` the image to `upload_url` as multipart form data. Do not upload to Cloudinary directly. |
+| `PUT /uploads/{asset_id}` added | `added` | Where the bytes go. Returns `{status}` — poll `GET /uploads/{asset_id}` until `ready`. |
+| `GET /vault/items` gains `q` and `category` filters; `POST /vault/wear` added | `added` | |
+
+The description previously said "direct client-to-CDN upload; the server never
+proxies image bytes". That could not be true alongside the privacy guarantee
+that Cloudinary receives redacted derivatives and never originals — a direct
+upload puts the unredacted original on the CDN, including images that are then
+rejected as unsafe.
+
+The bytes now reach the gateway, the PII pipeline runs in memory, and only the
+derivative is stored. Same endpoint names, different upload target.
+
+---
+
+## 2026-08-22 — Auth response bodies
+
+| Change | Type | Consumer action |
+|---|---|---|
+| `POST /auth/link/request` 202 gains `delivery`, `masked_destination`, `resend_available_in` | `added` | **Drive the resend cooldown from `resend_available_in`** rather than a hardcoded 60 seconds — the two disagree the moment the server rule changes. Show `masked_destination` on the check-email screen so a user can see whether they mistyped. |
+| `Session` gains `token_type`, `refresh_expires_in`, `onboarding` | `added` | Route straight from the auth screen using `onboarding` instead of calling `/me` first. That saves a round trip on the slowest screen in the product. |
+| `POST /auth/refresh` now returns `RefreshedSession`, not `Session` | `changed` | Same fields **minus** `onboarding`. Refresh runs every twelve minutes in the background and no screen reads onboarding at that moment; do not depend on it being there. |
+
+Neither response previously declared `token_type`. It has always been `Bearer`
+and still is — it is stated now rather than assumed.
+
+The `202` body remains byte-identical for a registered address and an unknown
+one. Every field in it is derived from the request, which is what keeps it from
+becoming an account-enumeration oracle. No field that depends on account
+existence may be added to it.
+
+---
+
 ## 2026-08-17 — Initial contract
 
 `added` — **`gateway.v1.yaml`**, the first public API contract. 52 paths, 61 operations across auth, profile, quiz, uploads, vault, looks, fabric, spree, agent, integrations, notifications, and privacy.

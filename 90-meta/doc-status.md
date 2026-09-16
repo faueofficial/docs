@@ -12,6 +12,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 
 | Document | Stage | Owner | Status |
 |---|---|---|---|
+| `prd.md` | MVP | backend | done |
 | `vision.md` | MVP | backend | done |
 | `mvp-scope.md` | MVP | backend | done |
 | `roadmap.md` | all | backend | done |
@@ -54,6 +55,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | `faue-db.md` | MVP | backend | done |
 | `faue-core.md` | MVP | backend | done |
 | `shared-packages.md` | MVP | backend | done |
+| `shared-package-deploys.md` | MVP | backend | done — how faue-core reaches a deployed service |
 | `admin.md` | MVP | backend | done |
 | `catalog/*` | M1-2 | backend | deferred — bounded module inside ase until extraction |
 | `media/*` | M1-2 | backend | deferred — bounded module inside gateway until extraction |
@@ -64,9 +66,10 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 
 | Document | Stage | Owner | Status |
 |---|---|---|---|
+| `api-documentation.md` | MVP | backend | done — where the served reference lives, what is hidden, and what the tests enforce |
 | `openapi/gateway.v1.yaml` | MVP | backend | done |
 | `openapi/ase.internal.v1.yaml` | MVP | backend | done |
-| `openapi/gateway.admin.v1.yaml` | MVP | backend | planned — written alongside admin implementation |
+| `openapi/gateway.admin.v1.yaml` | MVP | backend | draft — the operational surface is specified and implemented; style library, review queue, support, flags and the deletion ledger follow the build order |
 | `openapi/catalog shop-click endpoint` | M1-2 | backend | deferred — added with the catalog service |
 | `events/*.schema.json` | all | backend | done |
 | `CHANGELOG.md` | all | backend | done |
@@ -111,6 +114,7 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 |---|---|---|---|
 | `environments.md` | MVP | backend | done |
 | `deployment.md` | MVP | backend | done |
+| `railway-setup.md` | MVP | backend | done — first-deployment runbook |
 | `observability.md` | MVP | backend | done |
 | `incident-response.md` | MVP | backend | done |
 | `runbooks/*.md` | MVP | backend | done |
@@ -146,6 +150,8 @@ Owner values: `backend` (Testimony) · `frontend` (frontend engineer) · `conten
 | 7 | Delegated consent design (client → stylist, partial and revocable) | Professional track (Y2) | backend |
 | 8 | VTO consent purpose and guardrail exception, designed alongside the research | VTO | backend |
 | 9 | **Revoke the leaked GitHub PAT** — remote is clean, token is not | Launch | backend |
+| ~~12~~ | ~~`JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` named for an asymmetric design the code did not implement~~ — **resolved 2026-08-22: moved to EdDSA (Ed25519).** The names are now accurate, the public key is genuinely safe to distribute, and the runbook's overlapping rotation is real — `JWT_PUBLIC_KEY_NEXT` is implemented. `SERVICE_JWT_SECRET` stays HS256 deliberately: a shared secret between two services we control, with no third-party verifier | — | backend |
+| 11 | **22 of 30 Style DNA blend lines are unwritten.** `style-dna.md` authored 8 as examples and deferred the rest to the content pass. Unauthored pairs fall back to a generic line in `api-gateway/app/modules/quiz/copy.yaml` — structurally correct and deliberately bland, so it reads as unfinished to the content owner rather than to the user. The card is the acquisition surface; off-voice copy is worse than neutral copy | Share-card quality (soft launch blocker) | content |
 
 ## Design gaps requiring new Figma work
 

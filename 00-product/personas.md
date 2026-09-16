@@ -1,6 +1,6 @@
 # User Personas
 
-**Stage:** MVP
+**Stage:** MVP · **Requirements:** [`prd.md`](prd.md)
 
 Who FAUE is for. Distinct from **style personas** (`CM`, `OR`, `SL`, `SC`, `CE`, `NF`), which describe how someone dresses — see [`style-dna.md`](style-dna.md). These describe who they are and why they would open the app.
 

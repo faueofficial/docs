@@ -15,7 +15,7 @@ faue-core/
 ├─ faue_core/
 │  ├─ events/       envelope.py outbox.py publisher.py consumer.py inprocess.py
 │  ├─ telemetry/    otel.py logging.py scrub.py
-│  ├─ crypto/       envelope.py blind_index.py keys.py
+│  ├─ crypto/       envelope.py blind_index.py signing.py
 │  ├─ consent/      dependency.py purposes.py
 │  ├─ errors/       taxonomy.py handlers.py problem.py
 │  ├─ auth/         service_jwt.py
@@ -109,6 +109,21 @@ def blind_index(value: str, pepper: bytes) -> str:
 Envelope encryption means master-key rotation re-encrypts data keys rather than rows — minutes rather than hours.
 
 `normalise` lowercases and trims before hashing, so `Foo@Bar.com ` and `foo@bar.com` produce the same index. Getting that wrong makes login silently fail for a subset of users, which is a miserable bug to find.
+
+### Signing keys
+
+```python
+def generate_keypair() -> tuple[str, str]:        # (private, public), base64url
+def public_key_for(private_b64: str) -> str:      # derives the public half
+def load_private_key(value: str) -> Ed25519PrivateKey: ...
+def load_public_key(value: str) -> Ed25519PublicKey: ...
+```
+
+Ed25519 keys for user access tokens, encoded as **base64url of the 32 raw bytes on a single line** — not PEM. PEM is multi-line, and both `.env` files and Railway environment variables mangle embedded newlines badly enough that the value arrives corrupted and the error surfaces somewhere unrelated.
+
+The format lives here rather than in either consumer because two repositories have to agree on it: `faue-infra`'s generator writes it and `api-gateway` reads it. Two implementations of one encoding drift, and the symptom is every access token failing to verify at once.
+
+`generate_keypair` derives the public half from the private one rather than generating them side by side — an unrelated pair produces tokens that never verify, which reads as a configuration error rather than a generation bug.
 
 ---
 

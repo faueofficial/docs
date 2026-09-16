@@ -36,8 +36,10 @@ Every error response is an RFC 7807 problem document. Branch on `type`; never pa
 
 | `type` | Status | Meaning | Client action |
 |---|---|---|---|
-| `link_expired` | 410 | Token past its 10-minute life | Offer to send a new link |
+| `link_expired` | 410 | The token was issued by us and its 10-minute life has passed | Offer to send a new link |
+| `link_not_issued` | 410 | We have no record of minting this token — truncated in transit, re-encoded, or the whole `?t=` URL sent in place of the token | Offer a new link, **and check the client's token parsing**: this is usually a client bug, not a user who waited |
 | `link_already_used` | 410 | Single-use token reused | Offer to send a new link |
+| `link_superseded` | 410 | A newer link was requested, which invalidated this one | **Do not offer a new link** — tell the user to open the most recent email |
 | `device_code_required` | 409 | Opened on a different device | Show the returned code |
 | `device_code_invalid` | 400 | Wrong code entered | Allow retry; lock after 5 attempts |
 
@@ -102,7 +104,9 @@ Never show `detail` to a user. Map `type` to copy the product team owns.
 |---|---|
 | `consent_required` | *(no error — show the consent screen)* |
 | `link_expired` | "That link has expired. We'll send a fresh one." |
+| `link_not_issued` | "We couldn't read that link. We'll send a fresh one." |
 | `link_already_used` | "That link has already been used. Want a new one?" |
+| `link_superseded` | "We sent a newer link — please open the most recent email." |
 | `empty_pool` | "We need a bit more to work with. Add a few pieces to your vault, or try a different occasion." |
 | `budget_exceeded` | "You've reached today's generation limit. It resets at midnight." |
 | `guardrail_blocked` | "We can't work with that image. Try a clear photo of the piece itself." |

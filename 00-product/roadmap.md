@@ -1,6 +1,6 @@
 # Roadmap
 
-**Stage:** all
+**Stage:** all · **Requirements:** [`prd.md`](prd.md)
 
 Each phase unlocks only if the previous one hits its criteria. Building the next phase before the current one is proven is how a product acquires features nobody uses.
 

@@ -1,6 +1,6 @@
 # MVP Scope
 
-**Stage:** MVP · **Supersedes:** the scope sections of `faue.md` where they conflict
+**Stage:** MVP · **Requirements:** [`prd.md`](prd.md) · **Supersedes:** the scope sections of the legacy specification, reconciled and closed in [`../90-meta/reconciliation.md`](../90-meta/reconciliation.md)
 
 What ships first, what does not, and why. If a request is not on the "in" list, it is not in the MVP — say so and put it on the roadmap.
 

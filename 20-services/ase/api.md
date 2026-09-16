@@ -16,6 +16,10 @@ X-User-Id: <uuid>        the subject of the request; ase has no session concept
 
 The service JWT is short-lived (5 minutes), signed with `SERVICE_JWT_SECRET`, and carries `aud: ase`. A token with the wrong audience is rejected — that check is what stops a user token from ever working here even if one leaked into the wrong header.
 
+A pre-shared `ASE_SERVICE_TOKEN` is carried alongside it on the same hop and must match on both sides. It is a coarse gate in front of the JWT check, not a replacement for it: it never expires and is not bound to an audience, so it proves the caller was provisioned rather than that this particular request is fresh. Both values are generated together by `faue-infra/scripts/generate_secrets.py`.
+
+> **Not yet enforced.** Both values are configured on both services; the minting and verification are slice 5. Until then `ase` accepts calls without checking either, which is safe only because it has no public ingress. Tracked in [`../../90-meta/build-status.md`](../../90-meta/build-status.md).
+
 `ase` trusts `X-User-Id` because the caller is authenticated as the gateway. It has no way to verify a user itself, and should not.
 
 ---

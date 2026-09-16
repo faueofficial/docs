@@ -8,11 +8,15 @@ Single source of truth for how FAUE is built. If code and this documentation dis
 
 ## Start here
 
+**New to FAUE?** [`00-product/prd.md`](00-product/prd.md) — the problem, the users,
+the numbered requirements, and how success is measured. Every other document
+elaborates some part of it.
+
 ### If you are building the Flutter app or the web surfaces
 
 You should not need to read a backend document to do your job. Read, in order:
 
-1. [`00-product/mvp-scope.md`](00-product/mvp-scope.md) — what is being built and what is deliberately not.
+1. [`00-product/prd.md`](00-product/prd.md) — the requirements, numbered so a screen and a test can cite the same one. Then [`00-product/mvp-scope.md`](00-product/mvp-scope.md) for what is deliberately *not* being built.
 2. [`40-frontend/screens.md`](40-frontend/screens.md) — every screen, its route, the endpoints behind it, and its states.
 3. [`40-frontend/design-tokens.md`](40-frontend/design-tokens.md) — colours, type, spacing, components, with Flutter and Tailwind mappings.
 4. [`30-contracts/openapi/gateway.v1.yaml`](30-contracts/openapi/gateway.v1.yaml) — the API. Generate your client from this file.

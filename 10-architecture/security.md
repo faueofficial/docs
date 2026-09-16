@@ -42,10 +42,17 @@ Revocation is launch-blocking.
 |---|---|
 | `ENCRYPTION_MASTER_KEY` | Annually, or on suspicion |
 | `BLIND_INDEX_PEPPER` | **Only with a maintenance window** — rotation invalidates every index |
-| `JWT_PRIVATE_KEY` | Quarterly, overlapping |
+| `JWT_PRIVATE_KEY` | Quarterly, overlapping via `JWT_PUBLIC_KEY_NEXT` |
 | `SERVICE_JWT_SECRET` | Quarterly |
 | Apple client secret | **Every 6 months — it expires** |
 | Provider API keys | Annually, or on suspicion |
+
+User access tokens are signed with **Ed25519 (EdDSA)**. Asymmetric on purpose:
+`JWT_PUBLIC_KEY` verifies a token but cannot mint one, so it can be distributed
+freely and rotation can overlap — deploy the next public key, move signing, and
+nothing issued under the old key is invalidated. `SERVICE_JWT_SECRET` stays
+HS256: it is a shared secret between two services we control, with no
+third-party verifier and nothing to gain from a second key pair.
 
 The Apple secret is the one that will bite: it is an ES256 JWT with a hard six-month maximum life, and expiry breaks every Apple sign-in simultaneously. Its expiry date is an alert, not a calendar note.
 
@@ -66,6 +73,25 @@ Covered in [`../40-frontend/auth-flows.md`](../40-frontend/auth-flows.md). Secur
 ## 3. Service-to-service
 
 `ase`, and later `catalog` and `media`, are on a private network with **no public domain**. Calls carry a service JWT with a 5-minute life and an audience claim, so a user token can never work on an internal endpoint even if one ended up in the wrong header.
+
+**Enforced in `ase/app/auth.py`, on the routers rather than per handler**, so a route added later inherits the guard instead of relying on someone remembering it. A contract test asserts every `/internal` path declares it.
+
+Two credentials are required *together*, because either alone fails open in a plausible way:
+
+| | Protects against | Fails alone because |
+|---|---|---|
+| Service JWT — HS256 over `SERVICE_JWT_SECRET`, `aud: ase`, 5 min | a captured token being replayed later | a leaked signing secret mints unlimited replacements |
+| Pre-shared `X-Ase-Service-Token` | a leaked signing secret | it never rotates on its own — a password in an environment variable |
+
+Specifics that matter:
+
+- `algorithms=["HS256"]` is a list of exactly one, which is what refuses `alg: none` and blocks algorithm confusion. A verifier that trusts the token's own `alg` header accepts an unsigned token carrying correct-looking claims.
+- `aud` and `exp` are **required**, not merely validated when present — a verifier that only checks a claim it happens to find accepts every token that omits it.
+- The pre-shared token is compared with `secrets.compare_digest`. `==` returns at the first differing byte and leaks the value through timing.
+- An unset `ASE_SERVICE_TOKEN` fails **closed**.
+- Every rejection returns one identical message. Distinguishing "missing" from "invalid" tells an attacker which of the two credentials they already hold.
+
+This had been documented and not implemented. Until it was written, ase enforced nothing at all: the absence of a public domain was the only control — the one a network misconfiguration removes — while every internal router's docstring already claimed a service JWT was required. Being all stubs is why it had not mattered yet, not why it was safe.
 
 The gateway is the only service that makes synchronous calls to another service. Everything else is event-driven, which limits the reachable surface if any single service is compromised.
 

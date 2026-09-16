@@ -49,7 +49,7 @@ The session lands on the device that started the flow, which is what the user ex
 
 | Situation | Response |
 |---|---|
-| `202` received | Show the check-email screen. Start a 60-second resend cooldown. |
+| `202` received | Show the check-email screen. Start the cooldown from `resend_available_in` in the body — never a hardcoded 60, which drifts the moment the server rule changes. Display `masked_destination` so the user can see they typed the address correctly. |
 | Resend tapped | Call `/auth/link/request` again. The previous token is invalidated server-side. |
 | `410` on consume | "That link has expired or was already used." Offer to send a new one. |
 | `409` on consume | Show the device code prominently and explain where to type it. |
@@ -191,7 +191,9 @@ Revokes the presented family. The client must also clear secure storage, drop ca
        └──────────────────────────────────►┘
 ```
 
-`GET /me` returns `onboarding`, so the app can resume at the right step after reinstall or a device change:
+Sign-in responses (`/auth/link/consume`, `/auth/oauth/*`) already carry `onboarding`, so the app routes straight from the auth screen with no second call — that matters on the slowest screen in the product. `/auth/refresh` deliberately does **not**: it runs every twelve minutes in the background and no screen reads onboarding at that moment.
+
+`GET /me` returns the same `onboarding` block, for resuming after a reinstall or a device change:
 
 ```json
 { "username_set": true, "quiz_completed": true, "pinterest_connected": false,

@@ -47,7 +47,7 @@ All published through `gateway.outbox`, written in the same transaction as the s
 
 ## 3. Handler rules
 
-**Idempotent on `event_id`.** Every handler records processed identifiers and no-ops on redelivery. The notification path enforces this at the database level through `UNIQUE (user_id, template_id, event_id)`.
+**Idempotent on `event_id`.** Every handler records processed identifiers and no-ops on redelivery. The notification path enforces this at the database level through `UNIQUE (user_id, template_id, event_id, channel)` — per channel, because one delivery row is one channel.
 
 **Consent is re-checked at consume time, not publish time.** A user may revoke between the two. A handler that drops an event because consent was revoked has behaved correctly and records the drop rather than failing.
 

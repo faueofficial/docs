@@ -92,6 +92,7 @@ If the relay has stopped, events are safe but stale — nothing is lost. Restart
 ### Encryption master key
 
 ```
+0. Generate it: python faue-infra/scripts/generate_secrets.py --only ENCRYPTION_MASTER_KEY
 1. Add the new key as ENCRYPTION_MASTER_KEY_NEXT
 2. Deploy — the service reads with either key, writes with the current one
 3. Run the re-encrypt job: rotates data keys, not rows
@@ -103,7 +104,29 @@ Envelope encryption means rotation re-encrypts data keys rather than every row, 
 
 ### JWT signing key
 
-Publish the new public key alongside the old, sign with the new, wait for the access-token lifetime (15 minutes) plus a margin, then retire the old. No user-visible interruption.
+Ed25519. The verifying key is not a secret — it can check a token but cannot
+mint one — which is what makes an overlapping rotation possible.
+
+```bash
+python faue-infra/scripts/generate_secrets.py --only JWT_PRIVATE_KEY
+```
+
+```
+1. Deploy the new public key as JWT_PUBLIC_KEY_NEXT — verification accepts either
+2. Deploy the new private key; signing switches to it
+3. Wait out the access-token lifetime (15 minutes) plus a margin
+4. Remove the old public key
+```
+
+No user-visible interruption: tokens signed by the old key stay valid until they
+expire, and nothing is invalidated. Skipping step 1 and swapping both at once
+still works, but every access token issued in the previous 15 minutes is
+rejected and each client spends one extra refresh round trip recovering.
+
+> Both keys are base64url of 32 raw bytes on a single line — not PEM. PEM is
+> multi-line and `.env` files and Railway variables both mangle embedded
+> newlines. `faue_core.crypto.signing` owns the format so the generator and the
+> gateway cannot disagree about it.
 
 ### Blind index pepper
 

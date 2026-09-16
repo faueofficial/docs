@@ -1,6 +1,6 @@
 # Retention System
 
-**Stage:** MVP
+**Stage:** MVP · **Requirements:** [`prd.md`](prd.md) §4.5
 
 Retention is a system, not a notification schedule. The notifications are the least important part of it — they are what you reach for when the product itself has not given someone a reason to return.
 

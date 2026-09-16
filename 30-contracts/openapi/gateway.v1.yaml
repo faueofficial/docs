@@ -94,14 +94,33 @@ paths:
                   description: Client-generated opaque value binding the request to this device.
       responses:
         '202':
-          description: Link dispatched if the address is valid
+          description: >
+            Link dispatched if the address is valid. Every field below is derived
+            from the request, so this body is byte-identical for a registered
+            address and an unknown one — that is deliberate, and no field that
+            depends on account existence may be added to it.
           content:
             application/json:
               schema:
                 type: object
-                required: [expires_in]
+                required: [delivery, masked_destination, expires_in, resend_available_in]
                 properties:
-                  expires_in: { type: integer, example: 600, description: Seconds until the token expires }
+                  delivery:
+                    type: string
+                    enum: [email, sms]
+                    description: Where the code went. `email` today; `sms` arrives in M1-2 — read this rather than assuming.
+                  masked_destination:
+                    type: string
+                    example: 'ad••••@example.com'
+                    description: For the check-email screen. Derived from the address you sent, so it reveals nothing.
+                  expires_in: { type: integer, example: 600, description: Seconds until the link stops working }
+                  resend_available_in:
+                    type: integer
+                    example: 60
+                    description: >
+                      Seconds until another request is accepted. Drive the resend
+                      cooldown from this rather than a hardcoded value — the two
+                      disagree the moment the server rule changes.
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /auth/link/consume:
@@ -220,7 +239,7 @@ paths:
               properties:
                 refresh_token: { type: string }
       responses:
-        '200': { description: 'Rotated', content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '200': { description: 'Rotated', content: { application/json: { schema: { $ref: '#/components/schemas/RefreshedSession' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/logout:
@@ -428,8 +447,12 @@ paths:
       description: |
         `MVP` `Consent: camera_photos`
 
-        Returns short-lived credentials for a direct client-to-CDN upload. The
-        server never proxies image bytes.
+        Returns a short-lived, single-use upload URL. `PUT` the image to it.
+
+        **Not direct-to-CDN.** The bytes reach the gateway so the PII pipeline
+        can run before anything is stored — a direct upload would put the
+        unredacted original on the CDN, including images that are then
+        rejected.
 
         After upload the asset enters the PII pipeline — safety classification, EXIF
         strip, face redaction, OCR redaction. Until `status` is `ready` the asset
@@ -1268,11 +1291,30 @@ components:
 
     Session:
       type: object
-      required: [access_token, refresh_token, expires_in, is_new_user]
+      required: [access_token, token_type, expires_in, refresh_token, refresh_expires_in, is_new_user, onboarding]
       properties:
         access_token: { type: string }
+        token_type: { type: string, enum: [Bearer], description: 'How to present the access token.' }
+        expires_in: { type: integer, example: 900, description: 'Seconds until the access token expires.' }
         refresh_token: { type: string }
+        refresh_expires_in: { type: integer, example: 2592000, description: 'Seconds until the refresh token expires.' }
+        is_new_user: { type: boolean, description: 'Route to onboarding rather than the dashboard.' }
+        onboarding:
+          allOf: [{ $ref: '#/components/schemas/OnboardingState' }]
+          description: >
+            Included on sign-in so the app can route straight from the auth screen
+            without a second call. Absent from `/auth/refresh` — refresh runs every
+            twelve minutes and no screen reads this at that moment.
+
+    RefreshedSession:
+      type: object
+      required: [access_token, token_type, expires_in, refresh_token, refresh_expires_in, is_new_user]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
         expires_in: { type: integer, example: 900 }
+        refresh_token: { type: string }
+        refresh_expires_in: { type: integer, example: 2592000 }
         is_new_user: { type: boolean }
 
     Profile:

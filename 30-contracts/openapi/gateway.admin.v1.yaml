@@ -1,0 +1,536 @@
+openapi: 3.1.0
+info:
+  title: FAUE Admin API
+  version: 1.0.0
+  description: |
+    Internal operations console API. **Never exposed on the public domain**, never
+    publicly linked, and deliberately absent from the customer-facing OpenAPI
+    document — the app generates its client from `gateway.v1.yaml`, and admin
+    routes have no business in it.
+
+    A separate auth realm from `/v1/*`: different audience claim, different
+    identity table, shorter absolute session. A user token cannot authenticate
+    here and an admin token cannot authenticate against `/v1/*`.
+
+    Only the operational surface is specified so far. Style library, review
+    queue, user support, flags and the deletion ledger follow the build order in
+    `docs/20-services/admin.md` §9.
+
+servers:
+  - url: https://api.faueofficial.com/admin/v1
+    description: Behind the network gate — VPN, SSO or IP allowlist.
+
+security:
+  - adminBearer: []
+
+tags:
+  - name: admin-auth
+    description: Magic link, then TOTP. Two factors from genuinely different places.
+  - name: admin-ops
+    description: Health, queues and delivery outcomes.
+
+paths:
+  /auth/link/request:
+    post:
+      tags: [admin-auth]
+      summary: Request a sign-in link
+      security: []
+      description: |
+        Always `202`, whatever the address. Which addresses hold admin accounts
+        is precisely the list an attacker wants before choosing who to phish, so
+        the response cannot depend on it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202':
+          description: Link dispatched if the address belongs to an active admin.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  expires_in: { type: integer, example: 600 }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/link/consume:
+    post:
+      tags: [admin-auth]
+      summary: Complete sign-in with the link and a TOTP code
+      security: []
+      description: |
+        Both factors are checked before either is spent, so a mistyped code does
+        **not** burn the link — otherwise every typo costs a fresh email.
+
+        A code cannot be replayed. TOTP codes stay valid for roughly 90 seconds
+        including drift allowance, and used codes are held for that span.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, code]
+              properties:
+                token: { type: string }
+                code: { type: string, example: '318204', description: 'Six digits from the authenticator.' }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSession' }
+        '401': { description: 'Link expired or already used.' }
+        '403': { description: 'Wrong or already-used code. The link is still valid.' }
+        '428':
+          description: >
+            Account has not completed MFA enrolment. Not a refusal — the body
+            carries an enrolment token, and the console shows the QR flow.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/EnrolmentRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/mfa/enrol:
+    post:
+      tags: [admin-auth]
+      summary: Begin MFA enrolment
+      security: []
+      description: |
+        Authorised by an enrolment token rather than a session: a new admin has
+        no session yet, and the link they clicked already proved inbox control.
+
+        `provisioning_uri` contains the secret. Show it once as a QR code; never
+        log it, never re-display it. An already-enrolled account cannot re-enrol
+        itself — a live session could otherwise swap the second factor for one
+        an attacker controls.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enrolment_token]
+              properties:
+                enrolment_token: { type: string }
+      responses:
+        '200':
+          description: Secret issued. Enrolment is not complete until confirmed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, provisioning_uri]
+                properties:
+                  secret: { type: string }
+                  provisioning_uri: { type: string, example: 'otpauth://totp/FAUE:ada%40faueofficial.com?secret=...&issuer=FAUE' }
+        '401': { description: 'Enrolment token expired or already spent.' }
+        '403': { description: 'Already enrolled.' }
+
+  /auth/mfa/confirm:
+    post:
+      tags: [admin-auth]
+      summary: Confirm MFA enrolment
+      security: []
+      description: |
+        `mfa_enrolled` flips here, not when the secret was issued. A stored
+        secret only proves one was generated; if the operator never successfully
+        scanned it, treating them as enrolled locks them out permanently.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enrolment_token, code]
+              properties:
+                enrolment_token: { type: string }
+                code: { type: string }
+      responses:
+        '204': { description: 'Enrolled. The enrolment token is now spent.' }
+        '401': { description: 'Enrolment token expired or already spent.' }
+        '403': { description: 'That code did not match.' }
+
+  /auth/sessions:
+    get:
+      tags: [admin-auth]
+      summary: List live sessions
+      description: |
+        Every live session on this account, newest first.
+
+        `current` marks the session making the call — without it you cannot tell
+        which row is the device in your hand, and ending the wrong one signs you
+        out.
+
+        The raw user-agent is never stored; `device` is a coarse label, which is
+        enough to answer "is one of these not me?" without keeping a
+        fingerprint.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/AdminSessionRow' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/sessions/{jti}:
+    delete:
+      tags: [admin-auth]
+      summary: End one session
+      description: |
+        The lever people actually need: not "end everything", but "end that
+        session on the laptop I left at the office".
+
+        Only your own. The storage key is namespaced by account, so another
+        account's session id is not there and returns `404` — the same as an
+        unknown or already-ended session, which an operator on a stale screen
+        should learn about rather than be told it worked.
+      parameters:
+        - name: jti
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: 'Session ended. That device stops working immediately.' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { description: 'No such session on this account.' }
+
+  /auth/logout:
+    post:
+      tags: [admin-auth]
+      summary: End this session
+      description: |
+        Scoped to the session making the call. Signing out of a laptop must not
+        sign you out of a phone — anything broader and people stop signing out.
+      responses:
+        '204': { description: 'Session ended. The token stops working immediately.' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/sessions/revoke:
+    post:
+      tags: [admin-auth]
+      summary: End every session this account holds
+      description: |
+        The lever for a lost device. A timestamp cutoff rather than a list —
+        sessions cannot be enumerated, and the point is reaching the ones nobody
+        knows about. Includes the session making the call.
+
+        A cutoff, not a ban: signing in again works. A permanent block is
+        `status = 'suspended'`, a different decision.
+      responses:
+        '204': { description: 'All sessions ended.' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /admins/invite:
+    post:
+      tags: [admin-auth]
+      summary: Invite an admin
+      description: |
+        `Capability: role.write` — admin only. Granting a role is effectively
+        granting everything that role can reach.
+
+        Creates the account but **not** access: `status = 'invited'` cannot sign
+        in until MFA enrolment activates it. An invite that produced a usable
+        account would make a forwarded email an admin account.
+
+        Invites last three days and are single-use.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [viewer, curator, support, ml_ops, admin] }
+      responses:
+        '201':
+          description: Invited
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [invited] }
+                  role: { type: string }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '409': { description: 'That address already has an admin account.' }
+        '422': { description: 'Unknown role.' }
+
+  /auth/invite/accept:
+    post:
+      tags: [admin-auth]
+      summary: Accept an invitation
+      security: []
+      description: |
+        Unauthenticated by necessity — the invitee has no session yet, and the
+        token in the mail is the credential. Single-use, so a forwarded invite
+        is spent rather than live.
+
+        Returns an enrolment token; enrolment then follows the same two calls as
+        any other account, and confirming it activates the account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invite_token]
+              properties:
+                invite_token: { type: string }
+      responses:
+        '200':
+          description: Invite accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enrolment_token]
+                properties:
+                  enrolment_token: { type: string }
+        '401': { description: 'Invite expired or already used.' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /ops/health:
+    get:
+      tags: [admin-ops]
+      summary: Per-dependency health
+      description: |
+        `Capability: ops.read`
+
+        Not a boolean. Which dependency is down decides what to do next, and a
+        single flag collapses "the API is serving but Redis is down" into the
+        same value as "everything is fine".
+
+        `partial` is the state that matters: requests are being served while
+        something behind them is not.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /ops/events:
+    get:
+      tags: [admin-ops]
+      summary: Event backlog
+      description: |
+        `Capability: ops.read_queues`
+
+        `unpublished` and `parked` are different problems. Unpublished means the
+        relay is behind and usually catches up on its own. Parked means those
+        events exist and **no consumer will ever see them** without someone
+        intervening — an incident, not a queue depth.
+
+        Parked rows are named individually, because a count does not say which
+        handler to fix.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventBacklog' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /ops/notifications:
+    get:
+      tags: [admin-ops]
+      summary: Delivery outcomes
+      description: |
+        `Capability: ops.read_queues`
+
+        "Notifications are broken" is not actionable. "62 suppressed for
+        `no_consent`, 3 failed on `provider_unavailable`" says which of those is
+        a bug and which is the system working — suppression usually is, which is
+        why it reads as `partial` rather than `failure`.
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, default: 24, minimum: 1, maximum: 720 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryReport' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+components:
+  securitySchemes:
+    adminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Admin session token, `aud: faue-admin`. Eight hours absolute, never
+        sliding. The account is re-read from the database on every request, so a
+        suspension or a demotion takes effect before the token expires.
+
+  responses:
+    RateLimited:
+      description: >
+        Admin sign-in is the highest-value endpoint in the system and is limited
+        far more tightly than the user flow — a stolen link plus a brute-forced
+        six-digit code is only 10^6 attempts.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthenticated:
+      description: Missing, invalid, or expired admin session — including a valid *user* token.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    MissingCapability:
+      description: >
+        The role lacks the capability. The message names the capability, because
+        "forbidden" tells an operator nothing about what to grant.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    AdminSessionRow:
+      type: object
+      required: [jti, created_at, expires_at, device, current]
+      properties:
+        jti: { type: string, description: 'Pass to DELETE /auth/sessions/{jti} to end it.' }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        ip: { type: [string, 'null'] }
+        device:
+          type: string
+          example: 'Chrome on macOS'
+          description: Coarse by design. The raw user-agent is a fingerprint and is not stored.
+        current:
+          type: boolean
+          description: The session making this call. Ending it signs you out.
+
+    AdminSession:
+      type: object
+      required: [access_token, token_type, expires_in, role]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
+        expires_in: { type: integer, example: 28800, description: 'Eight hours, absolute. Never renewed by activity.' }
+        role: { type: string, enum: [viewer, curator, support, ml_ops, admin] }
+
+    EnrolmentRequired:
+      type: object
+      required: [type, title, status, enrolment_token]
+      properties:
+        type: { type: string, example: 'mfa_enrolment_required' }
+        title: { type: string }
+        status: { type: integer, example: 428 }
+        enrolment_token:
+          type: string
+          description: Short-lived, authorises exactly the two enrolment calls.
+
+    OutcomeStatus:
+      type: string
+      enum: [success, partial, failure]
+      description: >
+        The same vocabulary the logs use. `partial` means it worked and
+        something is still wrong — the state a boolean loses.
+
+    DependencyState:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/OutcomeStatus' }
+        latency_ms: { type: number }
+        reason:
+          type: [string, 'null']
+          description: >
+            Exception type, not its message. The message varies per incident, so
+            grouping by it produces one bucket per occurrence.
+
+    HealthReport:
+      type: object
+      required: [status, degraded, checked_at, dependencies, failing]
+      properties:
+        status: { $ref: '#/components/schemas/OutcomeStatus' }
+        degraded: { type: boolean }
+        checked_at: { type: string, format: date-time }
+        dependencies:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/DependencyState' }
+        failing:
+          type: array
+          items: { type: string }
+
+    ParkedEvent:
+      type: object
+      required: [event_id, event_name, attempts, occurred_at]
+      properties:
+        event_id: { type: string, format: uuid }
+        event_name: { type: string, example: 'look.failed' }
+        attempts: { type: integer }
+        occurred_at: { type: string, format: date-time }
+
+    EventBacklog:
+      type: object
+      required: [status, unpublished, parked, oldest_unpublished_at]
+      properties:
+        status: { $ref: '#/components/schemas/OutcomeStatus' }
+        unpublished: { type: integer, description: 'Still retryable — the relay is behind.' }
+        parked: { type: integer, description: 'Attempts exhausted. Nothing will publish these without intervention.' }
+        oldest_unpublished_at: { type: [string, 'null'], format: date-time }
+        unpublished_by_event:
+          type: object
+          additionalProperties: { type: integer }
+        parked_events:
+          type: array
+          items: { $ref: '#/components/schemas/ParkedEvent' }
+
+    DeliveryReport:
+      type: object
+      required: [window_hours, status, by_status, by_failure_reason]
+      properties:
+        window_hours: { type: integer }
+        status: { $ref: '#/components/schemas/OutcomeStatus' }
+        by_status:
+          type: object
+          additionalProperties: { type: integer }
+          example: { sent: 412, suppressed: 62, failed: 3 }
+        by_failure_reason:
+          type: object
+          additionalProperties: { type: integer }
+          example: { no_consent: 62, provider_unavailable: 3 }
+        by_channel:
+          type: array
+          items:
+            type: object
+            properties:
+              channel: { type: string }
+              status: { type: string }
+              count: { type: integer }
+
+    Problem:
+      type: object
+      description: RFC 7807.
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        trace_id: { type: string }

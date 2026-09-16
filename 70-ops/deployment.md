@@ -4,6 +4,11 @@
 
 ---
 
+**First deployment?** [`railway-setup.md`](railway-setup.md) is the one-time
+setup, in order. This document is the ongoing pipeline.
+
+---
+
 ## 1. Topology
 
 ```

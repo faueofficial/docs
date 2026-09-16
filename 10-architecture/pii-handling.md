@@ -26,8 +26,18 @@ The full lifecycle of personal data: what is collected, how it is protected, wha
 
 Every user-supplied image — fabric, vault item, fit photo, cached Pinterest pin — passes the same server-side pipeline before it is stored, shared, or sent to any model. **There is no path that skips it.**
 
+> **The client does not upload to the CDN.** The diagram below once said
+> "direct to CDN", which cannot be true alongside the data boundary two sections
+> down: a direct upload puts the *unredacted original* on Cloudinary, including
+> images we then reject, and the table promises Cloudinary receives derivatives
+> and nothing else.
+>
+> Bytes therefore arrive at the gateway, are redacted in memory, and only the
+> derivative is stored. That costs us the transfer — modest at MVP scale — and it
+> is what makes the guarantee real rather than aspirational.
+
 ```
-upload (direct to CDN with a short-lived signed credential)
+upload (to the gateway with a short-lived signed credential)
   │
   ├─ 1  SAFETY CLASSIFICATION
   │     reject NSFW, minors, non-apparel
@@ -56,7 +66,25 @@ upload (direct to CDN with a short-lived signed credential)
 
 **EXIF stripping** because GPS in photo metadata is the most common silent location leak in any photo-upload product, and it is entirely invisible to users. Someone photographing a shirt on their bed has just disclosed their home address.
 
-**Face redaction in-process** rather than via a vendor: sending an unredacted face to a third party in order to detect the face defeats the purpose.
+**Face redaction in-process** rather than via a vendor: sending an unredacted face to a third party in order to detect the face defeats the purpose. The same objection applies one step earlier to safety classification, which runs *first* and would therefore hand a vendor the unredacted image — so that is in-process too.
+
+The three models sit behind one `Detector` protocol, so which model is
+configuration rather than an assumption baked into the pipeline:
+
+| Stage | Implementation | Resident |
+|---|---|---|
+| Safety | `open_clip` zero-shot | ~350 MB |
+| Faces | MediaPipe BlazeFace | ~30 MB |
+| OCR | Tesseract | ~50 MB |
+
+They live in `faue-core/requirements/media.in`, a **worker-only** role. The
+gateway's web image never decodes an image — it signs uploads and reads asset
+rows — which is what keeps half a gigabyte of models out of every API instance.
+
+**Redaction is a fill, not a blur.** A blur is reversible enough to matter, and
+"unrecognisable to me, squinting" is not the standard. Boxes are also grown
+before filling: a tight box around a face leaves the hairline and jaw, which is
+still recognisable.
 
 **OCR redaction** because text inside an image reaches a model exactly as text does. A photo of a garment with a delivery label in frame carries an address into a prompt.
 
@@ -72,11 +100,11 @@ This matters for cost, not tidiness. A vault grid is many small image requests o
 
 | Tier | Role |
 |---|---|
-| **Cloudinary** | Primary — storage, CDN, on-the-fly transforms if ever needed |
+| **Cloudinary** | Primary — storage and CDN for **derivatives only**. Never an original, never a rejected image |
 | **Cloudflare R2** | Backup replica. A different provider from primary, the same rule already applied to database backups |
 | Railway object storage | Local and staging only; nobody's phone downloads from it |
 
-All three sit behind one `StorageProvider` interface, so the primary is a configuration choice rather than an assumption baked into upload code. Bandwidth — not storage — is the binding constraint, and approaching Cloudinary's free-tier bandwidth is the trigger to move primary to R2.
+All three sit behind one `StorageProvider` interface, so the primary is a configuration choice rather than an assumption baked into upload code. `local` is refused outside `ENVIRONMENT=local`: the Railway filesystem is ephemeral, so images would vanish on the next deploy and the user would find out days later as "my wardrobe is empty". Bandwidth — not storage — is the binding constraint, and approaching Cloudinary's free-tier bandwidth is the trigger to move primary to R2.
 
 ### Client-side blur is not a control
 
@@ -84,8 +112,13 @@ The Flutter app may blur locally for a better preview. The server repeats every 
 
 ### Auditability
 
+> **Implemented as `gateway.assets`.** `media` is an M1-2 extraction, so its
+> responsibilities live as a bounded module inside the gateway until then — the
+> same arrangement as `notify`. The columns and the guarantee are unchanged; only
+> the schema name differs, and it moves with the service.
+
 ```sql
-media.assets (
+gateway.assets (   -- media.assets after extraction
   exif_stripped BOOLEAN, faces_redacted BOOLEAN, ocr_redacted BOOLEAN,
   safety_verdict TEXT, original_retained BOOLEAN, retention_until TIMESTAMPTZ
 )
@@ -94,8 +127,8 @@ media.assets (
 Per-asset flags make compliance queryable and turn a pipeline bug into something visible rather than silent:
 
 ```sql
-SELECT count(*) FROM media.assets
-WHERE NOT exif_stripped OR NOT faces_redacted;   -- must always be zero
+SELECT count(*) FROM gateway.assets
+WHERE status = 'ready' AND (NOT exif_stripped OR NOT faces_redacted);  -- must be zero
 ```
 
 That query runs as a scheduled check and alerts on any non-zero result.

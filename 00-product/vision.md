@@ -1,6 +1,6 @@
 # Vision
 
-**Stage:** all
+**Stage:** all · **Requirements:** [`prd.md`](prd.md)
 
 ---
 
