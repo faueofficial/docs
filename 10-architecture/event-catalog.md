@@ -72,6 +72,8 @@ queues (durable, one per consumer, bound to explicit routing keys):
                            agent.suggestion.ready, integration.synced,
                            media.card.ready
   gateway.deletion       ← user.deletion.completed
+  gateway.contact        ← contact.received
+  gateway.waitlist       ← waitlist.joined
   analytics.sink         ← # (all events)
 
 dead-letter: <queue>.dlq for each, with x-dead-letter-exchange configured

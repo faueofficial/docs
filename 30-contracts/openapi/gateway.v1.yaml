@@ -22,7 +22,7 @@ info:
     `docs/40-frontend/realtime.md`.
   contact:
     name: FAUE Backend
-    email: faueofficial@gmail.com
+    email: hello@faueofficial.com
 
 servers:
   - url: https://api.faueofficial.com/v1
@@ -57,6 +57,14 @@ tags:
     description: Signed upload credentials
   - name: privacy
     description: Data subject rights
+  - name: contact
+    description: Messages from the website's contact and partners forms
+  - name: early-access
+    description: Pre-launch waitlist, joined from the website after taking the quiz
+  - name: cards
+    description: Style DNA cards as images, and the public page behind a shared card
+  - name: unsubscribe
+    description: Stopping email, without signing in
 
 security:
   - bearerAuth: []
@@ -64,6 +72,175 @@ security:
 paths:
 
   # ─────────────────────────────── auth ───────────────────────────────
+
+  # ─────────────────────────────── early access ───────────────────────
+
+  /early-access:
+    post:
+      tags: [early-access]
+      summary: Join the waitlist
+      description: |
+        `MVP` Reserves a username and puts an email address on the waitlist, with the
+        Style DNA the person just got. **No sign-in needed.**
+
+        The answers are scored again on the server and stored with the signup. The
+        response carries the card for those answers, so the website can show it as the
+        reward for joining in one round trip.
+
+        The username is a **reservation**: when someone signs up with the same email
+        address they can take it with `POST /auth/username`, and nobody else can. A
+        handle that is reserved, in use, or reads as official (`admin`, `faue`,
+        `support`, ...) returns **409** `username_taken` with `username` as the field.
+
+        An address that is already on the list is answered exactly like a first
+        submission, so the response cannot be used to find out who has joined. A
+        confirmation email is sent once.
+
+        `consent` must be `true` and `policy_version` is stored with the signup.
+        `website` is a honeypot. Limited to 5 per hour and 20 per day per IP address.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, username, quiz_version, answers, consent, policy_version]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                username: { type: string, minLength: 3, maxLength: 24, pattern: '^[a-zA-Z0-9_.]+$' }
+                quiz_version: { type: string }
+                answers:
+                  type: object
+                  description: |
+                    Question id to the chosen option id, or to a list of option ids when the question
+                    takes more than one (`max_choices` in `GET /quiz`). A single choice may be sent as a
+                    plain string. Order and repeats do not matter.
+                  additionalProperties:
+                    oneOf:
+                      - { type: string, example: 'A' }
+                      - { type: array, minItems: 1, maxItems: 4, items: { type: string }, example: ['A', 'D'] }
+                  example: { '1': ['A', 'C'], '2': 'C', '3': 'D', '4': ['A', 'D'], '5': 'A', '6': 'A' }
+                gender:
+                  type: string
+                  enum: [female, male, prefer_not_to_say]
+                  description: |
+                    From the waitlist form's dropdown. Optional so a client that predates it keeps working.
+                    It only decides which model photograph sits behind the person's card:
+                    `female` and `male` get a photograph from their own Style DNA, and `prefer_not_to_say`
+                    (or leaving it out) gets the plain card.
+                consent: { type: boolean, enum: [true], description: Agreement to be emailed when FAUE opens. }
+                policy_version: { type: string, maxLength: 40 }
+                website: { type: string, maxLength: 200, description: Honeypot. Must be empty. }
+      responses:
+        '202':
+          description: On the list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, username, dna]
+                properties:
+                  status: { type: string, enum: [joined] }
+                  username: { type: string, description: 'The name asked for, echoed back. Never what is stored.' }
+                  dna:
+                    allOf: [{ $ref: '#/components/schemas/DnaResult' }]
+                    description: |
+                      The result for the submitted answers. `dna.card_urls` carries signed image addresses
+                      for the person's own card (`stories_url` 9:16, `square_url` 4:5) and `share_url`, the
+                      public page whose link preview shows the card.
+                  card_photo:
+                    type: [string, 'null']
+                    enum: [f1, f2, m1, m2, null]
+                    description: Which model photograph is behind the card, or null for the plain card.
+        '409':
+          description: '`username_taken`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { description: A field failed validation. Nothing was saved. }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  # ─────────────────────────────── contact ────────────────────────────
+
+  /contact:
+    post:
+      tags: [contact]
+      summary: Send a message to the FAUE team
+      description: |
+        `MVP` Saves a message from the website's contact or partners form and emails
+        the FAUE team. **No sign-in needed**: the sender may have no account. If a
+        valid access token is sent the message is linked to that account; an invalid
+        one is ignored rather than refused.
+
+        **Retention:** the sender's name, email address, message and any partner
+        details are deleted **72 hours** after they arrive. Only a reference, the
+        topic and dates remain. The privacy notice says the same; change both together.
+
+        `Idempotency-Key` is required. A retry with the same key returns the original
+        reference and creates nothing new. Limited to 5 per hour and 20 per day per IP
+        address; beyond that the answer is `429` with `Retry-After`.
+
+        `website` is a honeypot. People never see it, and a non-empty value is answered
+        exactly like a success while nothing is stored.
+
+        `topic: press_partnership` is delivered to the partners mailbox and may carry
+        `partner_type`, `organisation` and `role`; every other topic goes to the
+        general mailbox.
+      security: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 128 }
+          description: Unique per submission, printable characters only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic, name, email, message, policy_version]
+              properties:
+                topic: { type: string, enum: [support, data_request, press_partnership, other] }
+                name: { type: string, minLength: 1, maxLength: 100 }
+                email: { type: string, format: email, maxLength: 254 }
+                message: { type: string, minLength: 10, maxLength: 4000 }
+                reference_code:
+                  type: string
+                  maxLength: 64
+                  description: The reference an app error showed, so support can find that request.
+                partner_type:
+                  type: string
+                  enum: [tailor, designer, fabric_seller, event_planner, stylist_creator, media, other]
+                organisation: { type: string, maxLength: 120 }
+                role: { type: string, maxLength: 80 }
+                policy_version:
+                  type: string
+                  maxLength: 40
+                  description: The privacy policy version the sender saw and agreed to.
+                website:
+                  type: string
+                  maxLength: 200
+                  description: Honeypot. Must be empty.
+      responses:
+        '202':
+          description: Saved. The team is emailed asynchronously; the sender is not told whether that has happened.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reference]
+                properties:
+                  reference: { type: string, example: FAUE-7K4M2Q, description: Short code to quote when following up. }
+        '400':
+          description: '`idempotency_key_required` — the header is missing or malformed.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: A field failed validation. Nothing was saved.
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /auth/link/request:
     post:
@@ -246,7 +423,19 @@ paths:
     post:
       tags: [auth]
       summary: Sign out
-      description: '`MVP` Revokes the presented refresh token family.'
+      description: |
+        `MVP` Revokes the refresh token sent, and ends that session only; other devices stay signed in.
+        Idempotent: an already revoked or unknown token still returns 204, so a retry after a network
+        failure needs no special case.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
       responses:
         '204': { description: 'Signed out' }
 
@@ -387,6 +576,41 @@ paths:
       responses:
         '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/QuizDefinition' } } } }
 
+  /quiz/preview:
+    post:
+      tags: [quiz]
+      summary: Score answers without an account
+      description: |
+        `MVP` Scores answers and returns the Style DNA result. **No sign-in needed and
+        nothing is stored or published.** The result is the one `POST /quiz/submit` would
+        give for the same answers, except `card_urls.status` is `not_applicable` and
+        `retake_available_at` is `null`. Limited per IP address.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quiz_version, answers]
+              properties:
+                quiz_version: { type: string }
+                answers:
+                  type: object
+                  description: Question id to option id, or a list of option ids, as for `POST /quiz/submit`.
+                  additionalProperties:
+                    oneOf:
+                      - { type: string }
+                      - { type: array, minItems: 1, maxItems: 4, items: { type: string } }
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DnaResult' }
+        '422': { description: Answers are missing or not valid options. }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /quiz/submit:
     post:
       tags: [quiz]
@@ -405,9 +629,15 @@ paths:
                 quiz_version: { type: string, example: 'dna-2026-08-v1' }
                 answers:
                   type: object
-                  description: Question id to option id.
-                  additionalProperties: { type: string, pattern: '^[A-E]$' }
-                  example: { '1': A, '2': C, '3': D, '4': A, '5': A, '6': A }
+                  description: |
+                    Question id to the chosen option id, or to a list of option ids when the question
+                    takes more than one (`max_choices` in `GET /quiz`). A single choice may be sent as a
+                    plain string. Order and repeats do not matter.
+                  additionalProperties:
+                    oneOf:
+                      - { type: string, example: 'A' }
+                      - { type: array, minItems: 1, maxItems: 4, items: { type: string }, example: ['A', 'D'] }
+                  example: { '1': ['A', 'C'], '2': 'C', '3': 'D', '4': ['A', 'D'], '5': 'A', '6': 'A' }
       responses:
         '200': { description: 'Scored', content: { application/json: { schema: { $ref: '#/components/schemas/DnaResult' } } } }
         '409': { description: 'Retake not yet available', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
@@ -493,6 +723,31 @@ paths:
         '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Asset' } } } }
         '404': { $ref: '#/components/responses/NotFound' }
 
+    put:
+      tags: [uploads]
+      summary: Upload the image bytes
+      description: |
+        `MVP` `Consent: camera_photos`
+
+        Where the bytes go after `POST /uploads/sign`. Send the image as `multipart/form-data` with one
+        field, `file`. The PII pipeline runs in memory and only the redacted derivative is stored.
+        Then poll `GET /uploads/{asset_id}` until `status` is `ready` or `rejected`.
+      parameters: [{ $ref: '#/components/parameters/AssetId' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { description: 'Accepted', content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [processing, ready, rejected] } } } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: 'Larger than the upload limit' }
+
   # ──────────────────────────────── vault ────────────────────────────────
 
   /vault/items:
@@ -576,10 +831,14 @@ paths:
 
   /vault/items/{item_id}/style:
     post:
+      deprecated: true
       tags: [vault]
-      summary: Style this item
+      summary: Style this item (not served)
       description: |
         `MVP` `Consent: ai_processing`
+
+        **Not served by the gateway today.** Use `POST /looks/generate` with this item, or
+        `POST /fabric/{asset_id}/style` for fabric. Kept here until the app stops referring to it.
 
         Starts look generation seeded by this item — the "Style this item" action.
         Returns a job envelope; see `/looks/jobs/{job_id}`.
@@ -1190,6 +1449,85 @@ paths:
       responses:
         '204': { description: 'Restricted' }
 
+  # ──────────────────────────────── cards and sharing ────────────────────────────────
+
+  /cards/dna.png:
+    get:
+      tags: [cards]
+      summary: A Style DNA card as a PNG
+      description: |
+        `MVP` **No sign-in needed**, because email clients and link previews load it.
+
+        Draws one card. The address is **signed**: it carries the personas, percentages, handle, shape and
+        photograph plus a `sig` the server made, so only a card the server issued can be drawn. Take the
+        full address from `dna.card_urls` or `images` in `GET /dna/{token}`; do not build one.
+
+        A changed or unsigned address returns **401**. The image never changes for an address, so it is
+        sent with `Cache-Control: public, max-age=31536000, immutable`.
+      security: []
+      parameters:
+        - { name: p, in: query, required: true, schema: { type: string, example: 'CM.49,CE.39,SL.12' }, description: 'Persona id and percentage, dominant first.' }
+        - { name: w, in: query, schema: { type: integer, minimum: 120, maximum: 1200, default: 1080 }, description: 'Width in pixels. Height follows the shape.' }
+        - { name: a, in: query, schema: { type: string, enum: ['4x5', '9x16', og], default: '4x5' }, description: '`9x16` for Stories, `4x5` for a feed post, `og` (1200x630) for link previews.' }
+        - { name: u, in: query, schema: { type: string }, description: 'The handle signed on the card.' }
+        - { name: pl, in: query, schema: { type: string, enum: [signature, tag, chip, trait], default: signature } }
+        - { name: ph, in: query, schema: { type: string, enum: [f1, f2, m1, m2] }, description: 'The model photograph behind the card.' }
+        - { name: sig, in: query, required: true, schema: { type: string }, description: 'Server signature over the other parameters.' }
+      responses:
+        '200': { description: 'The card', content: { image/png: { schema: { type: string, format: binary } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /dna/{token}:
+    get:
+      tags: [cards]
+      summary: The data behind a shared Style DNA card
+      description: |
+        `MVP` **No sign-in needed.** What the public share page and its link preview are built from.
+
+        `token` is the last part of a `share_url` (`https://faueofficial.com/dna/<token>`). It is signed by
+        the server and carries the personas, percentages, handle and photograph, so only an issued card can
+        be shown and nothing about the person is looked up. A changed or invented token returns **401**.
+        The answer never changes for a token and is cached for an hour.
+
+        Apps can use it to render a native "shared card" screen from a link they receive.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'The card', content: { application/json: { schema: { $ref: '#/components/schemas/SharedCard' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ──────────────────────────────── unsubscribe ────────────────────────────────
+
+  /unsubscribe/{token}:
+    get:
+      tags: [unsubscribe]
+      summary: What an unsubscribe link is for
+      description: |
+        `MVP` **No sign-in needed.** Says what the link would turn off, and changes nothing, so a mail
+        scanner that opens every link in a message cannot unsubscribe anyone. `category` is `waitlist`
+        (leave the list, releasing the reserved username) or an account category such as `marketing`.
+        A forged or damaged token returns **401**.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'OK', content: { application/json: { schema: { type: object, required: [category], properties: { category: { type: string, example: waitlist } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [unsubscribe]
+      summary: Unsubscribe
+      description: |
+        `MVP` **No sign-in needed.** The token is the credential. Also what a mail client's own one-click
+        Unsubscribe button posts to (RFC 8058, from the `List-Unsubscribe` header). Idempotent: repeating
+        it, or using a link for an entry that no longer exists, still answers 200.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 'Done', content: { application/json: { schema: { $ref: '#/components/schemas/UnsubscribeResult' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
 components:
 
   securitySchemes:
@@ -1268,10 +1606,10 @@ components:
       description: RFC 7807 problem document.
       required: [type, title, status]
       properties:
-        type: { type: string, example: 'consent_required', description: Stable machine-readable code. Branch on this, never on `title`. }
+        type: { type: string, example: 'consent_required', description: 'Stable machine-readable code. Branch on this, never on `title`.' }
         title: { type: string, example: 'Consent required' }
         status: { type: integer, example: 403 }
-        detail: { type: string, description: 'Human-readable', safe to log, never shown raw to users }
+        detail: { type: string, description: 'Human-readable. Safe to log, never shown raw to users.' }
         instance: { type: string, description: 'Trace id for support' }
         errors:
           type: array
@@ -1391,6 +1729,14 @@ components:
               prompt: { type: string }
               subtitle: { type: [string, 'null'] }
               progress: { type: integer, description: 'Percentage to show on this screen' }
+              max_choices:
+                type: integer
+                minimum: 1
+                description: |
+                  How many options may be ticked. 1 means a single choice (radio buttons); more means
+                  checkboxes, up to this many. Ticked options share the question's weight equally, so
+                  choosing more never gives a question a bigger say. Absent from a gateway that predates
+                  multiple answers: treat that as 1.
               options:
                 type: array
                 description: Length varies by question — Q6 has three. Build the layout from this.
@@ -1444,7 +1790,45 @@ components:
       properties:
         status: { type: string, enum: [pending, ready, failed] }
         square_url: { type: [string, 'null'], format: uri }
-        stories_url: { type: [string, 'null'], format: uri }
+        stories_url: { type: [string, 'null'], format: uri, description: 'A 1080x1920 PNG for Stories, WhatsApp status and TikTok.' }
+        share_url: { type: [string, 'null'], format: uri, description: 'The public page for this card. Pasting it into a chat shows a link preview of the card.' }
+
+    SharedCard:
+      type: object
+      required: [username, persona, persona_id, percentage, blend, tagline, title, description, images]
+      properties:
+        username: { type: [string, 'null'], description: 'The handle signed on the card, if it has one.' }
+        persona: { type: string, example: 'The Cultural Minimalist' }
+        persona_id: { type: string, example: CM }
+        percentage: { type: integer, description: 'The dominant persona percentage.' }
+        blend:
+          type: array
+          description: 'Dominant first. Percentages total 100.'
+          items:
+            type: object
+            required: [id, name, percentage]
+            properties:
+              id: { type: string, example: CE }
+              name: { type: string, example: Corporate Edge }
+              percentage: { type: integer }
+        tagline: { type: string }
+        blend_line: { type: string }
+        title: { type: string, example: 'ada_obi is The Cultural Minimalist on FAUE' }
+        description: { type: string }
+        images:
+          type: object
+          required: [preview, story, post]
+          properties:
+            preview: { type: string, format: uri, description: '1200x630, for link previews.' }
+            story: { type: string, format: uri, description: '1080x1920.' }
+            post: { type: string, format: uri, description: '1080x1350.' }
+
+    UnsubscribeResult:
+      type: object
+      required: [category, unsubscribed]
+      properties:
+        category: { type: string, example: waitlist }
+        unsubscribed: { type: boolean, enum: [true] }
 
     Asset:
       type: object
@@ -1596,7 +1980,7 @@ components:
         run_id: { type: string, format: uuid }
         look: { $ref: '#/components/schemas/LookSummary' }
         trigger: { type: string, enum: [daily, weather, event, proactive, on_demand] }
-        rationale: { type: string, description: 'Answers "why this?" from stored facts', not a fresh model guess }
+        rationale: { type: string, description: 'Answers "why this?" from stored facts, not a fresh model guess.' }
         weather:
           type: [object, 'null']
           properties:

@@ -1,0 +1,14 @@
+Subject: You have been invited to the FAUE admin console
+
+Testimony Adekoya has invited you to the FAUE admin console as support.
+
+Accept the invitation:
+https://faueofficial.com/admin/accept?t=3c9d2e
+
+You will be asked to set up two-factor authentication with an
+authenticator app. That step is required — the console cannot be used
+without it.
+
+This invitation expires in 3 days. If you were not expecting it, ignore
+this email and tell whoever runs FAUE.
+

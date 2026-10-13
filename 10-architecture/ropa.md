@@ -107,6 +107,33 @@ Bases: `contract` · `consent` · `explicit consent` (sensitive) · `legitimate 
 | `deliveries` | Operational | Legitimate interest | 12 months | No |
 | `inbox` | User-facing content | Contract | 6 months | No |
 
+## gateway.contact_messages
+
+Website enquiries from the contact and partners forms. Not tied to an account.
+
+| Field | Class | Basis | Retention | Leaves system |
+|---|---|---|---|---|
+| `name_enc`, `email_enc`, `message_enc`, `organisation_enc`, `role_enc` | Identifier and free text | Legitimate interest (answering a request the person made); a data request is also a legal obligation | **72 hours** from receipt | Yes — emailed to the FAUE team's mailbox (`hello@` or `partners@faueofficial.com`) |
+| `email_bidx`, `ip_bidx` | Blind index, keyed hash | Legitimate interest (finding one person's messages for export or erasure; abuse control) | **72 hours** | No |
+| `reference`, `topic`, `partner_type`, `status`, dates, `policy_version`, `reference_code` | Operational | Legitimate interest | Kept; contains nothing that identifies the sender | No |
+
+Cleared by the `contact_purge` worker (every 15 minutes). The copy in the team's mailbox is outside this database; anything that must outlive 72 hours lives there or in the privacy-request flow, and a data request is tracked against its own 30-day deadline.
+
+## gateway.waitlist_entries
+
+People who took the Style DNA quiz on the website and asked to be told when FAUE opens.
+
+| Field | Class | Basis | Retention | Leaves system |
+|---|---|---|---|---|
+| `email_enc` | Identifier | Consent (ticked on the form, `policy_version` stored with `consented_at`) | Until FAUE opens and the person has been told, or until they unsubscribe or ask for deletion | Yes: the email provider (Resend) receives it to send the confirmation and the launch email |
+| `username`, `username_key` | Identifier (a reservation, not an account) | Consent | As above | No |
+| `gender` (`female` or `male`, from a dropdown) | Personal data | Consent | As above | No. Used only to choose the model photograph behind the person's card |
+| `dna_answers`, `dna_scores`, `dna_dominant`, `dna_alter_ego`, `dna_wildcard` | Preference data | Consent | As above | No |
+| `email_bidx`, `ip_bidx` | Blind index, keyed hash | Legitimate interest (de-duplication, abuse control) | As above | No |
+| `status`, `source`, dates, `user_id` | Operational | Consent | As above | No |
+
+Linked to an account when the same email address signs up. Staff reads are audited (`waitlist.viewed`), and a message to one member is audited without its text (`waitlist.messaged`).
+
 ## gateway.admin_users / audit_log
 
 | Field | Class | Basis | Retention | Leaves system |

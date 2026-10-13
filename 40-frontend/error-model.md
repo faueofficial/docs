@@ -76,6 +76,7 @@ Every error response is an RFC 7807 problem document. Branch on `type`; never pa
 | `type` | Status | Meaning | Client action |
 |---|---|---|---|
 | `rate_limited` | 429 | Too many requests | Honour `Retry-After`; back off |
+| `idempotency_key_required` | 400 | Missing or malformed `Idempotency-Key` | Send a unique key; a client bug, not something to show |
 | `internal_error` | 500 | Unexpected | Generic message with `instance`; retry once |
 | `service_unavailable` | 503 | Dependency down | Retry with backoff |
 | `maintenance` | 503 | Planned | Show the maintenance screen |

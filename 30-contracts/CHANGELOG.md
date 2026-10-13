@@ -16,6 +16,33 @@ Format: newest first. Each entry states the change, its type, and what a consume
 
 ---
 
+## 2026-10-13 — Multiple quiz answers, sharing, unsubscribe, and the console API
+
+| Change | Type | Consumer action |
+|---|---|---|
+| `GET /quiz` questions gain `max_choices` | `added` | Render checkboxes up to that many when it is greater than 1. A response without it means 1. |
+| `answers` on `POST /quiz/submit`, `POST /quiz/preview` and `POST /early-access` may map a question to a **list** of option ids | `changed` | A plain string still works and means one choice. Send a list only when `max_choices` allows. More than `max_choices`, an empty list or an unknown option is `422`. |
+| `POST /early-access` gains optional `gender` (`female`, `male`, `prefer_not_to_say`) and returns `card_photo` | `added` | Add the dropdown. Omitting it keeps the plain card. |
+| `CardUrls` gains `share_url`; `POST /early-access` now fills `card_urls` with signed `stories_url`, `square_url` and `share_url` | `added` | Offer Story and Post and a Copy link action. Use the addresses exactly as given. |
+| `GET /cards/dna.png` (signed card image, 9:16, 4:5 or 1200x630) | `added` | Take addresses from `card_urls`; do not build them. |
+| `GET /dna/{token}` (data for a shared card) | `added` | Use it to open a received share link natively. |
+| `GET` and `POST /unsubscribe/{token}` | `added` | Back the unsubscribe screen: `GET` to show, `POST` to act. |
+| `PUT /uploads/{asset_id}` documented | `fixed` | It was served but missing from the contract. `multipart/form-data`, field `file`. |
+| `POST /auth/logout` documents its `refresh_token` body | `fixed` | None, the body was already required. |
+| `POST /vault/items/{item_id}/style` marked `deprecated` | `fixed` | It is not served. Use `POST /looks/generate` or `POST /fabric/{asset_id}/style`. |
+
+Admin contract (`gateway.admin.v1.yaml`):
+
+| Change | Type | Consumer action |
+|---|---|---|
+| `GET /me`, `/overview`, `/audit`, `/admins` | `added` | Console only. `/me` returns the role's capabilities; build the menu from it. |
+| Contact: `GET /contact/messages`, `GET`/`PATCH /contact/messages/{id}`, `POST .../reply` | `added` | These existed in the gateway and are now in the contract. |
+| Waitlist: list, summary, get, `PATCH` status, `POST .../message`, `DELETE` | `added` | Same. `PATCH` to `invited` now **sends the launch email**; `DELETE` emails a confirmation and deletes the entry. |
+
+New: [`app-developer-guide.md`](app-developer-guide.md), and the generated [`api-reference.md`](api-reference.md) and [`admin-api-reference.md`](admin-api-reference.md) (`tools/build_reference.py`).
+
+---
+
 ## 2026-09-02 — Uploads are not direct-to-CDN
 
 | Change | Type | Consumer action |

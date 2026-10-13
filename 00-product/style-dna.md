@@ -240,6 +240,15 @@ Applied in order, deterministic at every stage:
 
 Rule 3 exists so the function is **total** — every possible answer combination produces exactly one result. No input can produce an error.
 
+### Several answers to one question
+
+A person can tick more than one option on a question, up to `max_choices` (3 unless the question says otherwise, never more than it has options). Each question still counts once: the ticked options **share** the question's weight equally, so ticking more never gives a question a bigger say.
+
+- One option scores exactly as before.
+- With several, each option's points are divided by how many were ticked. Scores are held in whole numbers by multiplying every question by 12 (1, 2, 3 and 4 all divide it) in any submission that has at least one multi-answer question; percentages are unaffected because they are ratios.
+- The API takes a string for one option or a list for several (`{"4": ["A", "D"]}`). Order and repeats do not matter. An empty list, more than `max_choices`, or an unknown option is a validation error.
+- `GET /v1/quiz` returns `max_choices` per question.
+
 ---
 
 ## 6. Worked example

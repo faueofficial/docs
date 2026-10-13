@@ -28,6 +28,12 @@ tags:
     description: Magic link, then TOTP. Two factors from genuinely different places.
   - name: admin-ops
     description: Health, queues and delivery outcomes.
+  - name: admin-console
+    description: Who is signed in, the overview numbers, the audit log and the team.
+  - name: admin-contact
+    description: 'Website messages: read, mark and reply.'
+  - name: admin-waitlist
+    description: 'Early-access members: read, invite, write to, mark as left, delete.'
 
 paths:
   /auth/link/request:
@@ -374,6 +380,230 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/MissingCapability' }
 
+  # ───────────────────────────── console ─────────────────────────────
+
+  /me:
+    get:
+      tags: [admin-console]
+      summary: Who is signed in, and what they may do
+      description: |
+        The console calls this first. `capabilities` is the list the role holds, so the console can show
+        only the pages the role can open. The API enforces every capability regardless.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /overview:
+    get:
+      tags: [admin-console]
+      summary: The numbers on the console's front page
+      description: |
+        `Capability: ops.read`. Counts and 30 day series, no personal data. A section the role cannot read
+        (`waitlist` needs `waitlist.read`, `contact` needs `contact.read`) is `null`.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Overview' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /audit:
+    get:
+      tags: [admin-console]
+      summary: The audit log
+      description: |
+        `Capability: audit.read` (admin role). Newest first. Entries hold the action, the target and a few
+        non-personal facts. Message text and email addresses are never written to the log.
+      parameters:
+        - { name: action, in: query, schema: { type: string, maxLength: 60 }, description: 'An action, or the start of one: `waitlist`, `contact.replied`.' }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AuditList' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /admins:
+    get:
+      tags: [admin-console]
+      summary: Everyone with a console account
+      description: '`Capability: role.write` (admin role). Whether MFA is set up, never the factor itself.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Team' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  # ───────────────────────────── contact messages ─────────────────────────────
+
+  /contact/messages:
+    get:
+      tags: [admin-contact]
+      summary: List website messages
+      description: |
+        `Capability: contact.read`. Newest first, with a one-line preview. `counts` are for the whole inbox,
+        not the page. Opening the list is audited (that it happened, never the text).
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ContactStatus' } }
+        - { name: topic, in: query, schema: { $ref: '#/components/schemas/ContactTopic' } }
+        - { name: before, in: query, schema: { type: string, format: date-time }, description: 'Pass `next_before` from the previous page.' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContactList' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /contact/messages/{message_id}:
+    parameters:
+      - { name: message_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [admin-contact]
+      summary: Read one message
+      description: '`Capability: contact.read`. Audited. A message past its 72 hour retention has `purged: true` and no text or address.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContactDetail' } } } }
+        '404': { description: No such message }
+    patch:
+      tags: [admin-contact]
+      summary: Mark a message
+      description: '`Capability: contact.write`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/ContactStatus' }
+      responses:
+        '200': { description: The message, content: { application/json: { schema: { $ref: '#/components/schemas/ContactDetail' } } } }
+        '404': { description: No such message }
+        '422': { description: Unknown status }
+
+  /contact/messages/{message_id}/reply:
+    post:
+      tags: [admin-contact]
+      summary: Reply to a message by email
+      description: |
+        `Capability: contact.write`. Emails the person from the FAUE team, with their own message quoted
+        underneath, and marks the message `replied`. Replies to it come back to the team mailbox for the
+        topic. Nothing is saved if sending fails. The reply text is not stored and not written to the audit log.
+
+        Refused with **409** once the message is past retention, because there is no address left.
+      parameters:
+        - { name: message_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        '200':
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, reference]
+                properties:
+                  status: { type: string, enum: [replied] }
+                  reference: { type: string, example: FAUE-7K4M2Q }
+        '409': { description: 'Past retention, or the provider failed. Nothing was marked.' }
+        '404': { description: No such message }
+
+  # ───────────────────────────── waitlist ─────────────────────────────
+
+  /waitlist:
+    get:
+      tags: [admin-waitlist]
+      summary: List waitlist members
+      description: '`Capability: waitlist.read`. Newest first. Search by exact email address or by the start of a username.'
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/WaitlistStatus' } }
+        - { name: dominant, in: query, schema: { type: string, maxLength: 4, example: CM }, description: 'Dominant Style DNA persona id.' }
+        - { name: q, in: query, schema: { type: string, maxLength: 254 } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WaitlistList' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /waitlist/summary:
+    get:
+      tags: [admin-waitlist]
+      summary: Waitlist totals
+      description: '`Capability: waitlist.read`. Totals only, no personal data.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WaitlistSummary' } } } }
+
+  /waitlist/{entry_id}:
+    parameters:
+      - { name: entry_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [admin-waitlist]
+      summary: One member, with their quiz answers and scores
+      description: '`Capability: waitlist.read`. Audited.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WaitlistDetail' } } } }
+        '404': { description: No such member }
+    patch:
+      tags: [admin-waitlist]
+      summary: Change a member's status
+      description: |
+        `Capability: waitlist.write`. Setting `invited` **sends the launch email** ("FAUE is open"), once;
+        setting it again does not email twice. If the email fails the status is not changed. A member who
+        has unsubscribed cannot be invited (**409**). `unsubscribed` stops all email and releases the username.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [waiting, invited, unsubscribed] }
+      responses:
+        '200': { description: The member, content: { application/json: { schema: { $ref: '#/components/schemas/WaitlistDetail' } } } }
+        '409': { description: Unsubscribed members cannot be invited }
+        '404': { description: No such member }
+    delete:
+      tags: [admin-waitlist]
+      summary: Remove a member and delete their data
+      description: |
+        `Capability: waitlist.write`. Emails the person a short confirmation, then deletes the address,
+        username and quiz answers. Audited as `waitlist.deleted` (the entry's id, never what was deleted).
+      responses:
+        '204': { description: Deleted }
+        '404': { description: No such member }
+
+  /waitlist/{entry_id}/message:
+    post:
+      tags: [admin-waitlist]
+      summary: Write to one member
+      description: |
+        `Capability: waitlist.write`. One person at a time, on purpose. Refused for anyone who unsubscribed
+        (**409**). The text is not stored or copied into the audit log, only that a message of that length
+        was sent. A subject containing a line break is refused (**422**).
+      parameters:
+        - { name: entry_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, body]
+              properties:
+                subject: { type: string, minLength: 2, maxLength: 150 }
+                body: { type: string, minLength: 5, maxLength: 5000 }
+      responses:
+        '200': { description: Sent, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [sent] } } } } } }
+        '409': { description: The member unsubscribed }
+        '422': { description: Invalid subject or body }
+
 components:
   securitySchemes:
     adminBearer:
@@ -408,6 +638,205 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
 
   schemas:
+    Me:
+      type: object
+      required: [id, role, capabilities, session_expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [viewer, curator, support, ml_ops, admin] }
+        capabilities: { type: array, items: { type: string }, example: [ops.read, contact.read, contact.write] }
+        session_expires_at: { type: string, format: date-time }
+
+    DayCount:
+      type: object
+      required: [date, count]
+      properties:
+        date: { type: string, format: date }
+        count: { type: integer }
+
+    WaitlistStatus: { type: string, enum: [waiting, invited, joined, unsubscribed] }
+    ContactStatus: { type: string, enum: [new, replied, closed] }
+    ContactTopic: { type: string, enum: [support, data_request, press_partnership, other] }
+
+    Overview:
+      type: object
+      required: [generated_at, waitlist, contact, accounts, delivery]
+      properties:
+        generated_at: { type: string, format: date-time }
+        waitlist:
+          type: [object, 'null']
+          description: 'Null without `waitlist.read`.'
+          properties:
+            total: { type: integer }
+            by_status: { type: object, additionalProperties: { type: integer }, description: 'Keys: waiting, invited, joined, unsubscribed.' }
+            by_dominant: { type: object, additionalProperties: { type: integer }, description: 'Persona id to count.' }
+            by_gender: { type: object, additionalProperties: { type: integer }, description: 'female, male, prefer_not_to_say, not_given.' }
+            first_joined_at: { type: [string, 'null'], format: date-time }
+            daily: { type: array, description: 'Exactly 30 entries, oldest first, zeros included.', items: { $ref: '#/components/schemas/DayCount' } }
+            welcomed: { type: integer, description: 'Members whose confirmation email went out.' }
+        contact:
+          type: [object, 'null']
+          description: 'Null without `contact.read`.'
+          properties:
+            counts: { type: object, additionalProperties: { type: integer }, description: 'Keys: new, replied, closed.' }
+            by_topic: { type: object, additionalProperties: { type: integer } }
+            daily: { type: array, items: { $ref: '#/components/schemas/DayCount' } }
+            oldest_unanswered_at: { type: [string, 'null'], format: date-time }
+        accounts:
+          type: object
+          properties:
+            total: { type: integer }
+            quiz_completed: { type: integer }
+            by_dominant: { type: object, additionalProperties: { type: integer } }
+        delivery:
+          type: object
+          properties:
+            last_24h: { type: object, additionalProperties: { type: integer }, description: 'Notification outcome to count: sent, suppressed, failed.' }
+            unpublished_events: { type: integer }
+
+    AuditEntry:
+      type: object
+      required: [id, action, occurred_at, actor, target]
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string, example: waitlist.status_changed }
+        occurred_at: { type: string, format: date-time }
+        actor:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            role: { type: string }
+            email: { type: [string, 'null'] }
+        target:
+          type: object
+          properties:
+            type: { type: string, example: waitlist_entry }
+            id: { type: [string, 'null'], format: uuid }
+        before: { type: [object, 'null'] }
+        after: { type: [object, 'null'] }
+        ip: { type: [string, 'null'] }
+
+    AuditList:
+      type: object
+      required: [items, next_before]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } }
+        next_before: { type: [string, 'null'], format: date-time }
+
+    TeamMember:
+      type: object
+      required: [id, email, role, status, mfa_enrolled, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        role: { type: string }
+        status: { type: string, enum: [invited, active, suspended] }
+        mfa_enrolled: { type: boolean }
+        last_login_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    Team:
+      type: object
+      required: [items, roles]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/TeamMember' } }
+        roles: { type: array, items: { type: string }, description: 'Roles an invitation may name.' }
+
+    ContactSummary:
+      type: object
+      required: [id, reference, topic, topic_label, status, created_at, purged]
+      properties:
+        id: { type: string, format: uuid }
+        reference: { type: string, example: FAUE-7K4M2Q }
+        topic: { $ref: '#/components/schemas/ContactTopic' }
+        topic_label: { type: string, example: Support and complaints }
+        status: { $ref: '#/components/schemas/ContactStatus' }
+        partner_type: { type: [string, 'null'], enum: [tailor, designer, fabric_seller, event_planner, stylist_creator, media, other, null] }
+        created_at: { type: string, format: date-time }
+        replied_at: { type: [string, 'null'], format: date-time }
+        purged: { type: boolean, description: 'True once the 72 hour retention has deleted the text and sender.' }
+        name: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        snippet: { type: [string, 'null'], description: 'First 140 characters, whitespace collapsed.' }
+
+    ContactDetail:
+      allOf:
+        - { $ref: '#/components/schemas/ContactSummary' }
+        - type: object
+          properties:
+            message: { type: [string, 'null'] }
+            organisation: { type: [string, 'null'] }
+            role: { type: [string, 'null'] }
+            partner_type_label: { type: [string, 'null'] }
+            reference_code: { type: [string, 'null'] }
+            linked_account: { type: boolean }
+            policy_version: { type: string }
+            notified_at: { type: [string, 'null'], format: date-time }
+            handled_by: { type: [string, 'null'], format: uuid }
+
+    ContactList:
+      type: object
+      required: [items, next_before, counts]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ContactSummary' } }
+        next_before: { type: [string, 'null'], format: date-time }
+        counts:
+          type: object
+          properties:
+            new: { type: integer }
+            replied: { type: integer }
+            closed: { type: integer }
+            purged: { type: integer }
+
+    WaitlistMember:
+      type: object
+      required: [id, username, email, status, dna, linked, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string }
+        status: { $ref: '#/components/schemas/WaitlistStatus' }
+        dna:
+          type: object
+          properties:
+            dominant: { type: string, example: CM }
+            alter_ego: { type: [string, 'null'] }
+            wildcard: { type: [string, 'null'] }
+        linked: { type: boolean, description: 'Has an account with the same email address.' }
+        created_at: { type: string, format: date-time }
+        welcomed_at: { type: [string, 'null'], format: date-time }
+
+    WaitlistDetail:
+      allOf:
+        - { $ref: '#/components/schemas/WaitlistMember' }
+        - type: object
+          properties:
+            answers: { type: object, additionalProperties: { oneOf: [{ type: string }, { type: array, items: { type: string } }] } }
+            scores: { type: object, additionalProperties: { type: integer }, description: 'Raw persona scores. Percentages are recomputed from these.' }
+            quiz_version: { type: string }
+            policy_version: { type: string }
+            consented_at: { type: string, format: date-time }
+            source: { type: string, example: web_quiz }
+            gender: { type: [string, 'null'], enum: [female, male, prefer_not_to_say, null] }
+            invited_at: { type: [string, 'null'], format: date-time }
+            unsubscribed_at: { type: [string, 'null'], format: date-time }
+
+    WaitlistList:
+      type: object
+      required: [items, next_before]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/WaitlistMember' } }
+        next_before: { type: [string, 'null'], format: date-time }
+
+    WaitlistSummary:
+      type: object
+      required: [total, by_status, by_dominant, first_joined_at]
+      properties:
+        total: { type: integer }
+        by_status: { type: object, additionalProperties: { type: integer } }
+        by_dominant: { type: object, additionalProperties: { type: integer } }
+        first_joined_at: { type: [string, 'null'], format: date-time }
+
     AdminSessionRow:
       type: object
       required: [jti, created_at, expires_at, device, current]
