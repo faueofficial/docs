@@ -98,13 +98,18 @@ An orchestration, not a `DELETE`:
 
 ```
 POST /privacy/delete
-  → create deletion_ledger { sla_due_at: +30 days, modules_pending: [...] }
-  → emit user.deletion.requested
+  → mark the account, revoke refresh tokens, end live sessions (kill epoch)
+  → create deletion_ledger { sla_due_at: +30 days, purge_after: +14 days }
+  → waiting period: data kept; sign-in reaches only "see" and "cancel"
+        DELETE /privacy/delete   → ledger.cancelled_at, account restored
+  → at purge_after (dsr_purge worker):
+        gateway purges its tables and stored images, Pinterest token destroyed
+        emit user.deletion.requested   ← modules start purging only now
   → each module purges its own tables, then emits user.deletion.completed{module}
-  → third parties purged in parallel:
-        CDN assets · analytics profile · push tokens · Pinterest token revocation
   → ledger closes when every module and third party has acknowledged
 ```
+
+The waiting period exists because deletion is irreversible and people tap by mistake or lose a phone. It is shorter than the legal deadline (30 days) with room left for the modules to confirm, and it is capped in code at 25 days. It is only skipped by an admin acting on a confirmed request.
 
 What survives deletion, and why:
 

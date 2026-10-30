@@ -65,7 +65,7 @@ Bases: `contract` · `consent` · `explicit consent` (sensitive) · `legitimate 
 
 | Field | Class | Basis | Retention | Leaves system |
 |---|---|---|---|---|
-| All fields | Compliance record | Legal obligation | 7 years past account closure | No |
+| All fields (including `purge_after`, `cancelled_at`) | Compliance record | Legal obligation | 7 years past account closure | No |
 
 ## gateway.style_preferences / quiz_responses
 
@@ -97,6 +97,32 @@ Bases: `contract` · `consent` · `explicit consent` (sensitive) · `legitimate 
 |---|---|---|---|---|
 | `access_token_enc`, `refresh_token_enc` | Credential | Consent (`pinterest_sync`) | Until disconnected | Yes — to Pinterest, for API calls |
 | `provider_uid`, `scopes`, `sync_cursor` | Operational | Consent (`pinterest_sync`) | Until disconnected | No |
+
+## gateway.imported_pins
+
+Pins a person chose to import from a connected Pinterest account.
+
+| Field | Class | Basis | Retention | Leaves system |
+|---|---|---|---|---|
+| `board_id`, `board_name`, `pin_id` | Behavioural | Consent (`pinterest_sync`) | Until disconnected | No |
+| `title`, `description` | Third-party text, untrusted | Consent (`pinterest_sync`) | Until disconnected | Only inside a delimited block to a model |
+| `image_url` | Reference to Pinterest's CDN | Consent (`pinterest_sync`) | Until disconnected | No |
+
+## gateway.shared_items
+
+Looks a person shared to FAUE by link or image.
+
+| Field | Class | Basis | Retention | Leaves system |
+|---|---|---|---|---|
+| `source_url` | Behavioural | Contract | Life of account, or until removed | No |
+| `title`, `author_name` | Third-party text, untrusted | Contract | Life of account, or until removed | Only inside a delimited block to a model |
+| `thumbnail_url`, `asset_id` | Reference | Contract | Life of account, or until removed | No |
+
+## gateway.data_exports
+
+| Field | Class | Basis | Retention | Leaves system |
+|---|---|---|---|---|
+| `payload` (encrypted archive) | All categories, concentrated | Legal obligation (access request) | **7 days**, then deleted by `retention_ttl` | No |
 
 ## gateway.notify_*
 

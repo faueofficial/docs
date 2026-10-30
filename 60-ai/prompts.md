@@ -15,6 +15,7 @@ ase/app/prompts/
 ├─ look.rerank/v1.md
 ├─ fabric.classify/v1.md
 ├─ fabric.reasoning/v1.md
+├─ render.expand/v1.md          (render prompt expander; see ase-architecture.md 4.7.4)
 ├─ spree.chat/v1.md
 ├─ spree.intent_guard/v1.md
 ├─ agent.daily_brief/v1.md

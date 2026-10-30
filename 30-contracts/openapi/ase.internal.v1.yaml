@@ -7,8 +7,9 @@ info:
     Internal styling API. Called by `api-gateway` only, over the private network,
     authenticated with a short-lived service JWT carrying `aud: ase`.
 
-    Never exposed publicly. No user token is accepted here — `ase` trusts
-    `X-User-Id` because the caller is authenticated as the gateway.
+    Never exposed publicly. No user token is accepted here. `ase` trusts the `user_id` (and `workspace_id`) in the request
+    because the caller is authenticated as the gateway, which has already checked the person's session, consents and holds.
+    A look, job or session that belongs to someone else answers 404, exactly like one that does not exist.
 
     `ase` receives derived silhouette constraints, never raw body measurements.
 
@@ -22,382 +23,1875 @@ security:
   - serviceAuth: []
 
 paths:
-
   /internal/looks/generate:
     post:
-      summary: Enqueue look generation
+      tags:
+      - looks
+      summary: Generate
+      description: Assemble outfits for a user. Returns a job; poll it. A repeated idempotency key returns the same job.
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/UserId'
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [user_id, source]
               properties:
-                user_id: { type: string, format: uuid }
-                source: { type: string, enum: [vault, fabric, prompt, agent] }
-                item_ids: { type: array, items: { type: string, format: uuid } }
-                fabric_asset_id: { type: string, format: uuid }
-                occasion: { type: [string, 'null'] }
-                mood: { type: [string, 'null'] }
-                note: { type: [string, 'null'], maxLength: 280 }
-                use_weather: { type: boolean, default: false }
-                count: { type: integer, minimum: 1, maximum: 5, default: 3 }
-                constraints:
-                  $ref: '#/components/schemas/Constraints'
+                user_id:
+                  type: string
+                  format: uuid
+                workspace_id:
+                  type: string
+                  format: uuid
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  minLength: 1
+                context:
+                  additionalProperties: true
+                  type: object
+                  description: 'The context payload: consents, items, weather, taste, occasion, gender, persona.'
+              type: object
+              required:
+              - user_id
+              - workspace_id
+              - idempotency_key
+              - context
       responses:
         '202':
-          description: Job created
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
-                required: [job_id]
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
                 properties:
-                  job_id: { type: string, format: uuid }
-        '422': { $ref: '#/components/responses/PipelineError' }
-        '429': { $ref: '#/components/responses/PipelineError' }
-
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/looks/jobs/{job_id}:
     get:
-      summary: Job status
+      tags:
+      - looks
+      summary: Get Job
+      description: 'Poll a job. `status` is queued, analyzing, assembling, rendering, done or failed. `done` carries the looks;
+
+        `failed` carries a stable reason code and was not counted against the person.'
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: job_id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: user_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       responses:
         '200':
-          description: OK
+          description: Successful Response
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/JobStatus' }
-        '404': { description: Unknown job }
-
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/looks/{look_id}:
     get:
-      summary: Get a look
+      tags:
+      - looks
+      summary: Get Look
+      description: Fetch one generated look.
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: look_id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: user_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       responses:
         '200':
-          description: OK
+          description: Successful Response
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Look' }
-        '404': { description: Not found }
-
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/looks/{look_id}/regenerate:
     post:
-      summary: Regenerate, excluding the previous result
+      tags:
+      - looks
+      summary: Regenerate
+      description: 'A fresh alternative to a look: same occasion and constraints, a different set of pieces. Returns a job.'
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: look_id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  minLength: 1
+              type: object
+              required:
+              - user_id
+              - idempotency_key
       responses:
         '202':
-          description: Job created
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
                 properties:
-                  job_id: { type: string, format: uuid }
-
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/looks/{look_id}/adjust:
     post:
-      summary: Adjust a look
+      tags:
+      - looks
+      summary: Adjust
+      description: Move a look along an instruction in plain words (warmer, cooler, less formal, more formal, no black, more
+        gold). Returns a job.
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: look_id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
               properties:
-                swap_item_id: { type: string, format: uuid }
-                occasion: { type: [string, 'null'] }
-                note: { type: [string, 'null'] }
+                user_id:
+                  type: string
+                  format: uuid
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  minLength: 1
+                instruction:
+                  type: string
+                  maxLength: 120
+                  minLength: 1
+                  description: 'In the person''s words: warmer, less formal, no black, more gold. Unrecognised words fail the
+                    job, uncharged.'
+              type: object
+              required:
+              - user_id
+              - idempotency_key
+              - instruction
       responses:
         '202':
-          description: Job created
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
                 properties:
-                  job_id: { type: string, format: uuid }
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/looks/{look_id}/feedback:
+    post:
+      tags:
+      - looks
+      summary: Feedback
+      description: 'What the person thought of a look. Feeds their memory (what they like, what is never suggested again) when
+        they have
 
+        allowed personalisation; otherwise nothing is kept and `recorded` is false.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                workspace_id:
+                  anyOf:
+                  - type: string
+                    format: uuid
+                  - type: 'null'
+                signal:
+                  type: string
+                  description: more_like_this | saved | worn | shared | tailor_send | regenerated | dismissed | not_my_style
+                reason:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  description: 'For not_my_style: too_formal | too_casual'
+                exploration:
+                  type: boolean
+                  default: false
+              type: object
+              required:
+              - user_id
+              - signal
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/memory:
+    get:
+      tags:
+      - memory
+      summary: What Ase Knows
+      description: 'Everything ASE has learned about a person, as they see it: liked and disliked colours, cloths, the formality
+        lean, items
+
+        never suggested again, how many signals it rests on, and the facts they wrote themselves.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: user_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/memory/forget:
+    post:
+      tags:
+      - memory
+      summary: Forget
+      description: Forget what was learned from one item or one colour. Returns how many signals were removed.
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                item_id:
+                  anyOf:
+                  - type: string
+                    maxLength: 64
+                  - type: 'null'
+                colour:
+                  anyOf:
+                  - type: string
+                    maxLength: 24
+                  - type: 'null'
+              type: object
+              required:
+              - user_id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/memory/erase:
+    post:
+      tags:
+      - memory
+      summary: Erase
+      description: 'Erase everything ASE derived about a person: signals, preferences and facts. Used on consent revocation
+        and on deletion.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+              type: object
+              required:
+              - user_id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/memory/facts/{key}:
+    put:
+      tags:
+      - memory
+      summary: Put Fact
+      description: Keep one short fact the person wrote about their taste. Contact details and measurements are removed; the
+        keys are a closed set.
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                workspace_id:
+                  type: string
+                  format: uuid
+                value:
+                  type: string
+                  maxLength: 400
+                  minLength: 1
+              type: object
+              required:
+              - user_id
+              - workspace_id
+              - value
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+    delete:
+      tags:
+      - memory
+      summary: Delete Fact
+      description: Remove one fact.
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: user_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/fabric/suggest:
     post:
-      summary: Classify a fabric and suggest native styles
-      description: Synchronous. Rules select the styles; the model classifies and explains.
+      tags:
+      - fabric
+      summary: Suggest
+      description: 'Single-garment styling: what a cloth can really be made into, with a plain line on each.
+
+
+        Rules select the styles, from the cloth catalogue and the garment glossary (feasibility is physical fact and gates at
+        100%).
+
+        A model, when one is available and allowed, only words each line; it cannot add a style. Identifying the cloth from
+        a photo
+
+        happens at upload; this takes the cloth as a name.'
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [user_id, asset_id]
               properties:
-                user_id: { type: string, format: uuid }
-                asset_id: { type: string, format: uuid }
-                fabric_type: { type: [string, 'null'] }
-                occasion: { type: [string, 'null'] }
-                gender_presentation: { type: [string, 'null'] }
-                constraints: { $ref: '#/components/schemas/Constraints' }
+                user_id:
+                  type: string
+                  format: uuid
+                fabric:
+                  type: string
+                  maxLength: 80
+                  minLength: 1
+                  description: A catalogue id or any name for the cloth, such as `aso oke` or `lace`.
+                temp_c:
+                  anyOf:
+                  - type: number
+                    maximum: 60.0
+                    minimum: -40.0
+                  - type: 'null'
+                gender:
+                  anyOf:
+                  - type: string
+                    pattern: ^(male|female)$
+                  - type: 'null'
+                consent:
+                  type: boolean
+                  description: '`ai_processing` consent. Without it styles are listed with template lines and no model is called.'
+                  default: false
+              type: object
+              required:
+              - user_id
+              - fabric
       responses:
         '200':
-          description: OK
+          description: Successful Response
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/FabricAnalysis' }
-        '422': { $ref: '#/components/responses/PipelineError' }
-
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/spree/sessions:
     post:
-      summary: Start a spree session
+      tags:
+      - spree
+      summary: Create Session
+      description: Open a conversational styling session. Returns the session id used by the message endpoints.
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [user_id]
               properties:
-                user_id: { type: string, format: uuid }
+                user_id:
+                  type: string
+                  format: uuid
+                workspace_id:
+                  type: string
+                  format: uuid
+              type: object
+              required:
+              - user_id
+              - workspace_id
       responses:
         '201':
-          description: Created
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
                 properties:
-                  session_id: { type: string, format: uuid }
-
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/spree/sessions/{session_id}/messages:
     post:
-      summary: Send a message, stream the reply
+      tags:
+      - spree
+      summary: Send Message
+      description: 'Send a message and get the reply.
+
+
+        Off-topic input returns a templated refusal and never reaches the chat model (at most one cheap yes/no classification):
+        an open-ended chat endpoint that always calls the model
+
+        is an open-ended bill, and the refusal path is what bounds it. Reads only (six read-only tools), at most 4 tool rounds,
+
+        8 calls and 30 seconds. The reply is a single JSON body; streaming arrives with the apps'' chat screen.'
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: session_id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [user_id]
               properties:
-                user_id: { type: string, format: uuid }
-                text: { type: [string, 'null'], maxLength: 1000 }
-                asset_ids: { type: array, items: { type: string, format: uuid }, maxItems: 3 }
+                user_id:
+                  type: string
+                  format: uuid
+                message:
+                  type: string
+                  maxLength: 4000
+                  minLength: 1
+                context:
+                  additionalProperties: true
+                  type: object
+                  description: 'The same context payload as look generation: consents, items, weather, taste, occasion.'
+                images:
+                  anyOf:
+                  - items:
+                      additionalProperties: true
+                      type: object
+                    type: array
+                  - type: 'null'
+                  description: 'Attachments with the flags the upload pipeline set: apparel, nsfw, minor, readable. Anything
+                    not cleared as apparel is refused.'
+              type: object
+              required:
+              - user_id
+              - message
+              - context
       responses:
         '200':
-          description: SSE stream
-          content:
-            text/event-stream:
-              schema: { type: string }
-
-  /internal/agent/today:
-    get:
-      summary: Today's suggestion, generated on demand if absent
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: user_id
-          in: query
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
+          description: Successful Response
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AgentSuggestion' }
-        '204': { description: No suggestion available and none could be generated }
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/spree/sessions/{session_id}:
+    get:
+      tags:
+      - spree
+      summary: Get Session
+      description: Read a session transcript back (already redacted), so the gateway can restore a conversation when the app
+        reopens.
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: user_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/agent/today:
+    post:
+      tags:
+      - agent
+      summary: Today
+      description: 'Build today''s proactive suggestion for a user: one look from their wardrobe and a plain line on why.
 
+
+        Combines the wardrobe, what ASE has learned, the weather and the occasion. Called on a schedule or when the app opens,
+        and
+
+        idempotent per day: the surface the user did not ask for must exist before they open the app, and must not cost more
+        each time.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                workspace_id:
+                  type: string
+                  format: uuid
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  minLength: 1
+                  description: One per person per day, so repeated calls cost one run.
+                context:
+                  additionalProperties: true
+                  type: object
+                  description: The context payload; `occasion` is set when the person has something on today or tomorrow.
+                event_title:
+                  anyOf:
+                  - type: string
+                    maxLength: 80
+                  - type: 'null'
+              type: object
+              required:
+              - user_id
+              - workspace_id
+              - idempotency_key
+              - context
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/agent/runs/{run_id}/outcome:
     post:
-      summary: Record the outcome of a suggestion
+      tags:
+      - agent
+      summary: Record Outcome
+      description: 'Record what became of a suggestion. Outcomes are what stop the agent repeating something the user already
+        rejected, so a
+
+        dismissal is as valuable to send as an acceptance.'
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: run_id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [outcome]
               properties:
-                outcome: { type: string, enum: [accepted, dismissed, regenerate] }
-      responses:
-        '204': { description: Recorded }
-
-  /internal/context/weather:
-    get:
-      summary: Weather for a coarse location
-      description: Returns 204 when unavailable or not consented. Callers proceed without it.
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: geohash5
-          in: query
-          required: true
-          schema: { type: string, minLength: 5, maxLength: 5 }
-        - name: user_id
-          in: query
-          required: true
-          schema: { type: string, format: uuid }
+                user_id:
+                  type: string
+                  format: uuid
+                outcome:
+                  type: string
+                  description: accepted | dismissed | saved | worn
+              type: object
+              required:
+              - user_id
+              - outcome
       responses:
         '200':
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Weather' }
-        '204': { description: Unavailable }
-
-  /internal/context/occasions:
-    get:
-      summary: Active and upcoming cultural windows for a region
-      description: |
-        The cultural calendar. Read by look generation (occasion defaults and the
-        formality prior), the agent (L2 triggers), and the retention worker
-        (campaign scheduling) — one source rather than three copies.
-
-        Returns an empty list rather than an error when nothing is active or the
-        calendar has no rows for the current year. Callers proceed without it.
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - name: region
-          in: query
-          schema: { type: string, default: NG }
-        - name: horizon_days
-          in: query
-          description: How far ahead to report upcoming windows.
-          schema: { type: integer, default: 30, minimum: 0, maximum: 180 }
-      responses:
-        '200':
-          description: OK
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
-                required: [signals]
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
                 properties:
-                  signals:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
                     type: array
-                    items: { $ref: '#/components/schemas/OccasionSignal' }
-
+                type: object
   /internal/embeddings/item:
     post:
-      summary: Embed and index a vault item
+      tags:
+      - embeddings
+      summary: Embed Item
+      description: 'Read the colours of a piece from its photo and file them against the item.
+
+
+        Deterministic and model-free: the background is set aside, what is left is clustered, and each cluster is named by the
+        nearest of
+
+        the 18 palette colours. Idempotent on the image: the same photo for the same item returns what was filed. The colours
+        are a
+
+        suggestion for the person to correct; the vault item stays the source of truth.'
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [item_id, user_id, image_url]
               properties:
-                item_id: { type: string, format: uuid }
-                user_id: { type: string, format: uuid }
-                image_url: { type: string, format: uri }
-      responses:
-        '202': { description: Queued }
-
-  /internal/embeddings/reembed:
-    post:
-      summary: Start an embedding model migration
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
+                user_id:
+                  type: string
+                  format: uuid
+                workspace_id:
+                  type: string
+                  format: uuid
+                item_id:
+                  type: string
+                  format: uuid
+                image_b64:
+                  type: string
+                  maxLength: 2800000
+                  description: The redacted preview of the piece, base64, at most about 2 MB.
               type: object
-              required: [model_id, subject_type]
-              properties:
-                model_id: { type: string }
-                subject_type: { type: string, enum: [vault, style, fabric, aspiration, product] }
-      responses:
-        '202': { description: Queued }
-
-  /internal/admin/health:
-    get:
-      summary: Pipeline health, budgets, index statistics
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
+              required:
+              - user_id
+              - workspace_id
+              - item_id
+              - image_b64
       responses:
         '200':
-          description: OK
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  stage_latency_ms: { type: object, additionalProperties: { type: number } }
-                  budgets: { type: object }
-                  index_stats: { type: object }
-                  embedding_coverage: { type: number }
-
-  /internal/admin/model-config:
-    get:
-      summary: Resolved task to tier to model mapping
-      parameters:
-        - $ref: '#/components/parameters/TraceId'
-      responses:
-        '200':
-          description: OK
+                additionalProperties: true
+        '422':
+          description: Validation Error
           content:
             application/json:
-              schema: { type: object }
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/embeddings/reembed:
+    post:
+      tags:
+      - embeddings
+      summary: Reembed
+      description: '**Planned — not yet implemented.** Calling it now returns 500.
 
+
+        Re-embed a user''s vault with a new embedding model.
+
+
+        Dual-write, shadow-evaluate, then flip; never in place. Needs the hosted embedding model, which is not chosen yet.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/admin/health:
+    get:
+      tags:
+      - admin
+      summary: Health
+      description: 'Model-plane health: which providers are configured, which tasks have a model behind them, and what is switched
+        off.
+
+
+        Distinct from `/healthz` and `/readyz`, deliberately. A provider outage must **not** fail readiness: generation degrades
+        to
+
+        the template path, and taking the instance out of rotation would turn a degraded feature into a total outage.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/admin/model-config:
+    get:
+      tags:
+      - admin
+      summary: Model Config
+      description: 'The model configuration currently in force: which model serves which task, and the budget ceilings. Read
+        it before
+
+        changing anything through the kill switch.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/admin/kill-switches:
+    get:
+      tags:
+      - admin
+      summary: Kill Switches
+      description: What is switched off right now, and why.
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
   /internal/admin/kill-switch:
     post:
-      summary: Enable or disable a model-backed task
+      tags:
+      - admin
+      summary: Kill Switch
+      description: 'Stop (or resume) model spend immediately, for the whole model plane or one task.
+
+
+        The incident control: a switched-off task takes its template path, so generation falls back to rules and composites.
+        It
+
+        bites within seconds and needs no deploy, which is the point: an incident is the worst time to wait on a build.'
+      security:
+      - serviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [task, enabled]
               properties:
-                task: { type: string }
-                enabled: { type: boolean }
+                name:
+                  type: string
+                  maxLength: 64
+                  minLength: 1
+                  description: '`model_plane` for everything, or one task such as `look.rerank`.'
+                disabled:
+                  type: boolean
+                  default: true
+                reason:
+                  type: string
+                  maxLength: 500
+                  minLength: 10
+                actor:
+                  type: string
+                  format: uuid
+              type: object
+              required:
+              - name
+              - reason
+              - actor
       responses:
-        '204': { description: Applied }
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/admin/costs:
+    get:
+      tags:
+      - admin
+      summary: Costs
+      description: Spend and how calls were answered, by task, for the last N days, with the budget ceilings beside it.
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 90
+          minimum: 1
+          default: 7
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/admin/review-bundle:
+    get:
+      tags:
+      - admin
+      summary: Review Bundle
+      description: 'Every piece of content ASE would show or apply (style cards, ontology rules, skill references) in the shape
+        the review
+
+        queue takes, each flagged with whether this exact version is already approved. The gateway files the unapproved ones.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+  /internal/admin/skills:
+    get:
+      tags:
+      - admin
+      summary: Skills
+      description: 'The skills in this build: their version (a hash of the whole folder), phases, tiers and the eval sets that
+        cover them.'
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
 
 components:
 

@@ -2,7 +2,7 @@
 
 > Generated from the OpenAPI contract by `tools/build_reference.py`. Do not edit by hand.
 
-The operations console's API. A separate auth realm from the public API. Read [app-developer-guide.md](app-developer-guide.md#the-admin-api) for how it signs in.
+The operations console's API. A separate auth realm from the public API. Read [app-developer-guide.md](app-developer-guide.md#12-the-admin-api) for how it signs in.
 
 **Base URL:** `https://api.faueofficial.com/admin/v1`
 
@@ -12,7 +12,13 @@ The operations console's API. A separate auth realm from the public API. Read [a
 - [admin-ops](#admin-ops) (3)
 - [admin-console](#admin-console) (4)
 - [admin-contact](#admin-contact) (4)
-- [admin-waitlist](#admin-waitlist) (6)
+- [admin-waitlist](#admin-waitlist) (8)
+- [admin-integrations](#admin-integrations) (3)
+- [admin-lifecycle](#admin-lifecycle) (1)
+- [admin-settings](#admin-settings) (3)
+- [admin-flags](#admin-flags) (2)
+- [admin-media](#admin-media) (2)
+- [admin-privacy](#admin-privacy) (6)
 
 ## admin-auth
 
@@ -1503,6 +1509,875 @@ was sent. A subject containing a line break is refused (**422**).
 - **409**: The member unsubscribed
 - **422**: Invalid subject or body
 
+### `POST /waitlist/invite-batch`
+
+**Invite the next people on the list**
+
+`Capability: waitlist.write`. Sends the launch invite to the next `limit` (1 to 50) members
+who are still `waiting`, oldest first, optionally only one dominant style. Never selects
+anyone invited, joined or unsubscribed. Each person is committed on their own, so a
+provider failure part way leaves the ones already sent invited. `dry_run` only counts.
+
+**Auth:** bearer token
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `limit` | integer |  |  |
+| `dominant` | string |  |  |
+| `dry_run` | boolean |  |  |
+
+```json
+{
+  "limit": 0,
+  "dominant": "string",
+  "dry_run": true
+}
+```
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `selected` | integer |  |  |
+| `invited` | integer |  |  |
+| `failed` | integer |  |  |
+| `dry_run` | boolean |  |  |
+| `still_waiting` | integer |  |  |
+
+```json
+{
+  "selected": 0,
+  "invited": 0,
+  "failed": 0,
+  "dry_run": true,
+  "still_waiting": 0
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `GET /waitlist/export.csv`
+
+**Export the waitlist as CSV**
+
+`Capability: user.export`. Email, username, status, styles, gender and dates. `reason` (10 to
+300 characters) is required and is kept in the audit log with the row count. Members who
+unsubscribed are left out unless `status=unsubscribed` is asked for. Cells that begin with
+`=`, `+`, `-` or `@` are prefixed so a spreadsheet does not run them.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `reason` | query | string | yes |  |
+| `status` | query | `waiting` / `invited` / `joined` / `unsubscribed` |  |  |
+
+**Responses**
+
+- **200**: CSV
+
+  Body (`text/csv`):
+
+```json
+"string"
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **422**: Reason missing or too short
+
+## admin-integrations
+
+Connected accounts and the pins imported through them.
+
+### `GET /integrations`
+
+**Connected accounts**
+
+`Capability: integration.read`. Newest connection first. Tokens are never returned. Audited. `summary` counts the whole set.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `status` | query | `active` / `syncing` / `needs_reauth` / `revoked` |  |  |
+| `provider` | query | `pinterest` |  |  |
+| `before` | query | string (date-time) |  |  |
+| `limit` | query | integer |  |  |
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].user_id` | string (uuid) | yes |  |
+| `items[].provider` | `pinterest` | yes |  |
+| `items[].status` | `active` / `syncing` / `needs_reauth` / `revoked` | yes |  |
+| `items[].scopes` | array of string | yes |  |
+| `items[].connected_at` | string (date-time) | yes |  |
+| `items[].last_sync_at` | string or null (date-time) |  |  |
+| `items[].token_expires_at` | string or null (date-time) |  |  |
+| `items[].boards_imported` | integer | yes |  |
+| `items[].pins_imported` | integer | yes |  |
+| `next_before` | string or null (date-time) | yes |  |
+| `summary` | object | yes |  |
+| `summary.by_status` | object | yes |  |
+| `summary.by_status.<key>` | integer |  |  |
+| `summary.connected` | integer | yes |  |
+| `summary.pins_imported` | integer | yes |  |
+
+```json
+{
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "provider": "pinterest",
+      "status": "active",
+      "scopes": [
+        "string"
+      ],
+      "connected_at": "2026-10-13T09:30:00Z",
+      "last_sync_at": "2026-10-13T09:30:00Z",
+      "token_expires_at": "2026-10-13T09:30:00Z",
+      "boards_imported": 0,
+      "pins_imported": 0
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z",
+  "summary": {
+    "by_status": {
+      "active": 12,
+      "needs_reauth": 1
+    },
+    "connected": 0,
+    "pins_imported": 0
+  }
+}
+```
+
+- **401**: Missing, invalid, or expired admin session — including a valid *user* token.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `GET /integrations/{account_id}/pins`
+
+**Pins imported through one connection**
+
+`Capability: integration.read_pins`. Newest first, with the boards they came from. Titles and descriptions are text written by strangers on Pinterest: render as plain text. Audited.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `account_id` | path | string (uuid) | yes |  |
+| `board_id` | query | string |  |  |
+| `before` | query | string (date-time) |  |  |
+| `limit` | query | integer |  |  |
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `account` | object | yes |  |
+| `account.id` | string (uuid) | yes |  |
+| `account.user_id` | string (uuid) | yes |  |
+| `account.provider` | `pinterest` | yes |  |
+| `account.status` | `active` / `syncing` / `needs_reauth` / `revoked` | yes |  |
+| `account.scopes` | array of string | yes |  |
+| `account.connected_at` | string (date-time) | yes |  |
+| `account.last_sync_at` | string or null (date-time) |  |  |
+| `account.token_expires_at` | string or null (date-time) |  |  |
+| `account.boards_imported` | integer | yes |  |
+| `account.pins_imported` | integer | yes |  |
+| `boards` | array of object | yes |  |
+| `boards[]` | object |  |  |
+| `boards[].board_id` | string | yes |  |
+| `boards[].name` | string | yes |  |
+| `boards[].pins` | integer | yes |  |
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].pin_id` | string | yes |  |
+| `items[].board_id` | string | yes |  |
+| `items[].board_name` | string | yes |  |
+| `items[].title` | string or null |  | Untrusted text. Render as plain text. |
+| `items[].description` | string or null |  | Untrusted text. Render as plain text. |
+| `items[].image_url` | string or null |  | A Pinterest CDN address (i.pinimg.com). |
+| `items[].image_status` | `none` / `pending_detector` / `cached` / `rejected` / `failed` | yes |  |
+| `items[].imported_at` | string (date-time) | yes |  |
+| `next_before` | string or null (date-time) | yes |  |
+
+```json
+{
+  "account": {
+    "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+    "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+    "provider": "pinterest",
+    "status": "active",
+    "scopes": [
+      "string"
+    ],
+    "connected_at": "2026-10-13T09:30:00Z",
+    "last_sync_at": "2026-10-13T09:30:00Z",
+    "token_expires_at": "2026-10-13T09:30:00Z",
+    "boards_imported": 0,
+    "pins_imported": 0
+  },
+  "boards": [
+    {
+      "board_id": "string",
+      "name": "string",
+      "pins": 0
+    }
+  ],
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "pin_id": "string",
+      "board_id": "string",
+      "board_name": "string",
+      "title": "string",
+      "description": "string",
+      "image_url": "string",
+      "image_status": "none",
+      "imported_at": "2026-10-13T09:30:00Z"
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z"
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: No such connected account
+
+### `DELETE /integrations/{account_id}`
+
+**Disconnect on the person's behalf**
+
+`Capability: integration.write`. Deletes the stored token and every pin imported through it. The person is not notified. Audited.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `account_id` | path | string (uuid) | yes |  |
+
+**Responses**
+
+- **204**: Disconnected
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: No such connected account
+
+## admin-lifecycle
+
+Lifecycle campaigns: state and results.
+
+### `GET /lifecycle/overview`
+
+**Campaigns, state and results**
+
+`Capability: ops.read`. Whether campaigns are on (`lifecycle_enabled` under Settings), how many people agreed to marketing, and for each message what was sent and opened in the last 30 days. Counts only.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+## admin-settings
+
+Tunable, non-secret values: thresholds, limits and clean-up periods.
+
+### `GET /settings`
+
+**Tunable settings**
+
+`Capability: settings.read`. Each with its type, bounds, default and what is in force. Secrets, keys and addresses are not tunable and are not listed.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `PUT /settings/{key}`
+
+**Change a setting**
+
+`Capability: settings.write`. Checked against the type and bounds in the list (`422` outside them); a reason of at least 5 characters is required and audited. Takes effect within about ten seconds; workers pick it up on their next pass.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `key` | path | string | yes |  |
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `value` | object | yes | A number or a boolean |
+| `reason` | string | yes |  |
+
+```json
+{
+  "value": null,
+  "reason": "string"
+}
+```
+
+**Responses**
+
+- **200**: The setting after the change
+- **404**: Not a tunable setting
+- **422**: Wrong type or outside the bounds
+
+### `DELETE /settings/{key}`
+
+**Return a setting to its default**
+
+`Capability: settings.write`.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `key` | path | string | yes |  |
+
+**Responses**
+
+- **200**: The setting at its default
+- **404**: Not a tunable setting
+
+## admin-flags
+
+Feature switches: pause a feature without a deploy.
+
+### `GET /flags`
+
+**Feature switches**
+
+`Capability: flags.read`. Every switch with its default, current value and who last changed it. `enabled: true` means the feature is working.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `PUT /flags/{key}`
+
+**Turn a switch off or on**
+
+`Capability: flags.write`. Keys: `service` (whole product API into maintenance), `uploads`,
+`pinterest`, `shares`, `waitlist_signups`. A paused feature answers `503`. Takes effect
+within about ten seconds on every instance. A reason of at least 5 characters is
+required and is written to the audit log.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `key` | path | string | yes |  |
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+| `reason` | string | yes |  |
+
+```json
+{
+  "enabled": true,
+  "reason": "string"
+}
+```
+
+**Responses**
+
+- **200**: The switch after the change
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: No such switch
+
+## admin-media
+
+Uploads, storage, backup and sharing, as counts.
+
+### `GET /media/overview`
+
+**Uploads and storage**
+
+`Capability: media.read`. Counts only: what is stored and refused, where, whether the backup is keeping up, and what the clean-up has left. No image, key or address.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `GET /sharing/overview`
+
+**Sharing, in and out**
+
+`Capability: media.read`. `to_faue` counts looks shared to FAUE by source; `from_faue` counts cards shared out by kind and surface, and shared links opened (which includes chat link previews).
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+## admin-privacy
+
+Deletion requests, and accounts: reveal an address, delete an account.
+
+### `GET /privacy/requests`
+
+**Deletion requests**
+
+`Capability: deletion_ledger.read`. The deletion ledger. Unfinished requests come soonest deadline first. `scheduled` is inside the waiting period: the account is signed out but nothing has been removed and it can be cancelled. `summary` counts the whole ledger.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `state` | query | `scheduled` / `open` / `overdue` / `completed` / `cancelled` |  |  |
+| `before` | query | string (date-time) |  |  |
+| `limit` | query | integer |  |  |
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].user_id` | string (uuid) | yes | The account that was deleted. |
+| `items[].state` | `scheduled` / `open` / `overdue` / `completed` / `cancelled` | yes |  |
+| `items[].requested_at` | string (date-time) | yes |  |
+| `items[].purge_after` | string or null (date-time) |  | When the data is removed. |
+| `items[].sla_due_at` | string (date-time) | yes |  |
+| `items[].completed_at` | string or null (date-time) |  |  |
+| `items[].cancelled_at` | string or null (date-time) |  |  |
+| `items[].days_left` | integer or null |  | Negative when overdue. Null once completed. |
+| `items[].modules_pending` | array of string | yes | Modules that have not confirmed yet. |
+| `items[].modules_done` | array of string | yes |  |
+| `items[].third_parties_done` | array of string | yes |  |
+| `next_before` | string or null (date-time) | yes |  |
+| `summary` | object | yes |  |
+| `summary.scheduled` | integer | yes |  |
+| `summary.open` | integer | yes |  |
+| `summary.overdue` | integer | yes |  |
+| `summary.due_within_5_days` | integer | yes |  |
+| `summary.completed` | integer | yes |  |
+| `summary.cancelled` | integer | yes |  |
+
+```json
+{
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "state": "scheduled",
+      "requested_at": "2026-10-13T09:30:00Z",
+      "purge_after": "2026-10-13T09:30:00Z",
+      "sla_due_at": "2026-10-13T09:30:00Z",
+      "completed_at": "2026-10-13T09:30:00Z",
+      "cancelled_at": "2026-10-13T09:30:00Z",
+      "days_left": 0,
+      "modules_pending": [
+        "string"
+      ],
+      "modules_done": [
+        "string"
+      ],
+      "third_parties_done": [
+        "string"
+      ]
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z",
+  "summary": {
+    "scheduled": 0,
+    "open": 0,
+    "overdue": 0,
+    "due_within_5_days": 0,
+    "completed": 0,
+    "cancelled": 0
+  }
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `POST /privacy/requests/{ledger_id}/acknowledge`
+
+**Record a module as purged**
+
+`Capability: deletion_ledger.write`. Verify first (see the DSR runbook). The note is kept in the audit log. The request closes when every module has been recorded. `409` for a module that is not part of the request.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `ledger_id` | path | string (uuid) | yes |  |
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `module` | string | yes |  |
+| `note` | string | yes |  |
+
+```json
+{
+  "module": "ase",
+  "note": "string"
+}
+```
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `user_id` | string (uuid) | yes | The account that was deleted. |
+| `state` | `scheduled` / `open` / `overdue` / `completed` / `cancelled` | yes |  |
+| `requested_at` | string (date-time) | yes |  |
+| `purge_after` | string or null (date-time) |  | When the data is removed. |
+| `sla_due_at` | string (date-time) | yes |  |
+| `completed_at` | string or null (date-time) |  |  |
+| `cancelled_at` | string or null (date-time) |  |  |
+| `days_left` | integer or null |  | Negative when overdue. Null once completed. |
+| `modules_pending` | array of string | yes | Modules that have not confirmed yet. |
+| `modules_done` | array of string | yes |  |
+| `third_parties_done` | array of string | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "state": "scheduled",
+  "requested_at": "2026-10-13T09:30:00Z",
+  "purge_after": "2026-10-13T09:30:00Z",
+  "sla_due_at": "2026-10-13T09:30:00Z",
+  "completed_at": "2026-10-13T09:30:00Z",
+  "cancelled_at": "2026-10-13T09:30:00Z",
+  "days_left": 0,
+  "modules_pending": [
+    "string"
+  ],
+  "modules_done": [
+    "string"
+  ],
+  "third_parties_done": [
+    "string"
+  ]
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: No such request
+- **409**: The module is not part of this request
+
+### `GET /accounts`
+
+**Accounts**
+
+`Capability: user.read`. Newest first. Addresses are masked. `q` is the start of a username, or a full email address. Audited.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `q` | query | string |  |  |
+| `before` | query | string (date-time) |  |  |
+| `limit` | query | integer |  |  |
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].username` | string or null |  |  |
+| `items[].email_masked` | string or null |  |  |
+| `items[].status` | string | yes |  |
+| `items[].created_at` | string (date-time) | yes |  |
+| `items[].quiz_completed` | boolean | yes |  |
+| `items[].restricted` | boolean | yes | The person restricted processing. |
+| `items[].integrations` | array of string | yes |  |
+| `items[].deletion_scheduled` | boolean |  | Waiting out the deletion period. |
+| `items[].purge_after` | string or null (date-time) |  |  |
+| `next_before` | string or null (date-time) | yes |  |
+
+```json
+{
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "username": "string",
+      "email_masked": "a***@e***.com",
+      "status": "string",
+      "created_at": "2026-10-13T09:30:00Z",
+      "quiz_completed": true,
+      "restricted": true,
+      "integrations": [
+        "string"
+      ],
+      "deletion_scheduled": true,
+      "purge_after": "2026-10-13T09:30:00Z"
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z"
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `POST /accounts/{user_id}/reveal`
+
+**Reveal an account's email address**
+
+`Capability: user.read_pii`. A reason of at least 10 characters is required and is stored in the audit log.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `user_id` | path | string (uuid) | yes |  |
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `justification` | string | yes |  |
+
+```json
+{
+  "justification": "string"
+}
+```
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `email` | string | yes |  |
+
+```json
+{
+  "email": "string"
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: No such account
+- **422**: Reason missing or too short
+
+### `POST /accounts/{user_id}/delete`
+
+**Schedule an account for deletion**
+
+`Capability: user.delete`. The same as the person's own request: sessions end at once and the data
+is removed after the waiting period, during which `restore` undoes it. `immediate: true` removes it
+at the next purge pass instead and cannot then be undone. Idempotent while a request is open. A
+reason of at least 10 characters is required and is stored in the audit log.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `user_id` | path | string (uuid) | yes |  |
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `justification` | string | yes |  |
+| `immediate` | boolean |  |  |
+
+```json
+{
+  "justification": "string",
+  "immediate": true
+}
+```
+
+**Responses**
+
+- **202**: Scheduled
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `ledger_id` | string (uuid) | yes |  |
+| `sla_due_at` | string (date-time) | yes |  |
+| `purge_after` | string or null (date-time) |  |  |
+
+```json
+{
+  "ledger_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "sla_due_at": "2026-10-13T09:30:00Z",
+  "purge_after": "2026-10-13T09:30:00Z"
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: No such account
+- **422**: Reason missing or too short
+
+### `POST /accounts/{user_id}/restore`
+
+**Cancel a scheduled deletion**
+
+`Capability: user.delete`. Only before the data is removed (`409` after). The person signs in as normal. A reason is required and audited.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `user_id` | path | string (uuid) | yes |  |
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `justification` | string | yes |  |
+
+```json
+{
+  "justification": "string"
+}
+```
+
+**Responses**
+
+- **200**: Restored
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `status` | `restored` |  |  |
+
+```json
+{
+  "status": "restored"
+}
+```
+
+- **403**: The role lacks the capability. The message names the capability, because "forbidden" tells an operator nothing about what to grant.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **409**: Nothing waiting
+
 ## Schemas
 
 ### Me
@@ -2288,6 +3163,379 @@ was sent. A subject containing a line break is refused (**422**).
       "count": 0
     }
   ]
+}
+```
+
+### Justification
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `justification` | string | yes |  |
+
+```json
+{
+  "justification": "string"
+}
+```
+
+### ConnectedAccount
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `user_id` | string (uuid) | yes |  |
+| `provider` | `pinterest` | yes |  |
+| `status` | `active` / `syncing` / `needs_reauth` / `revoked` | yes |  |
+| `scopes` | array of string | yes |  |
+| `connected_at` | string (date-time) | yes |  |
+| `last_sync_at` | string or null (date-time) |  |  |
+| `token_expires_at` | string or null (date-time) |  |  |
+| `boards_imported` | integer | yes |  |
+| `pins_imported` | integer | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "provider": "pinterest",
+  "status": "active",
+  "scopes": [
+    "string"
+  ],
+  "connected_at": "2026-10-13T09:30:00Z",
+  "last_sync_at": "2026-10-13T09:30:00Z",
+  "token_expires_at": "2026-10-13T09:30:00Z",
+  "boards_imported": 0,
+  "pins_imported": 0
+}
+```
+
+### IntegrationList
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].user_id` | string (uuid) | yes |  |
+| `items[].provider` | `pinterest` | yes |  |
+| `items[].status` | `active` / `syncing` / `needs_reauth` / `revoked` | yes |  |
+| `items[].scopes` | array of string | yes |  |
+| `items[].connected_at` | string (date-time) | yes |  |
+| `items[].last_sync_at` | string or null (date-time) |  |  |
+| `items[].token_expires_at` | string or null (date-time) |  |  |
+| `items[].boards_imported` | integer | yes |  |
+| `items[].pins_imported` | integer | yes |  |
+| `next_before` | string or null (date-time) | yes |  |
+| `summary` | object | yes |  |
+| `summary.by_status` | object | yes |  |
+| `summary.by_status.<key>` | integer |  |  |
+| `summary.connected` | integer | yes |  |
+| `summary.pins_imported` | integer | yes |  |
+
+```json
+{
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "provider": "pinterest",
+      "status": "active",
+      "scopes": [
+        "string"
+      ],
+      "connected_at": "2026-10-13T09:30:00Z",
+      "last_sync_at": "2026-10-13T09:30:00Z",
+      "token_expires_at": "2026-10-13T09:30:00Z",
+      "boards_imported": 0,
+      "pins_imported": 0
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z",
+  "summary": {
+    "by_status": {
+      "active": 12,
+      "needs_reauth": 1
+    },
+    "connected": 0,
+    "pins_imported": 0
+  }
+}
+```
+
+### ImportedPin
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `pin_id` | string | yes |  |
+| `board_id` | string | yes |  |
+| `board_name` | string | yes |  |
+| `title` | string or null |  | Untrusted text. Render as plain text. |
+| `description` | string or null |  | Untrusted text. Render as plain text. |
+| `image_url` | string or null |  | A Pinterest CDN address (i.pinimg.com). |
+| `image_status` | `none` / `pending_detector` / `cached` / `rejected` / `failed` | yes |  |
+| `imported_at` | string (date-time) | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "pin_id": "string",
+  "board_id": "string",
+  "board_name": "string",
+  "title": "string",
+  "description": "string",
+  "image_url": "string",
+  "image_status": "none",
+  "imported_at": "2026-10-13T09:30:00Z"
+}
+```
+
+### PinList
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `account` | object | yes |  |
+| `account.id` | string (uuid) | yes |  |
+| `account.user_id` | string (uuid) | yes |  |
+| `account.provider` | `pinterest` | yes |  |
+| `account.status` | `active` / `syncing` / `needs_reauth` / `revoked` | yes |  |
+| `account.scopes` | array of string | yes |  |
+| `account.connected_at` | string (date-time) | yes |  |
+| `account.last_sync_at` | string or null (date-time) |  |  |
+| `account.token_expires_at` | string or null (date-time) |  |  |
+| `account.boards_imported` | integer | yes |  |
+| `account.pins_imported` | integer | yes |  |
+| `boards` | array of object | yes |  |
+| `boards[]` | object |  |  |
+| `boards[].board_id` | string | yes |  |
+| `boards[].name` | string | yes |  |
+| `boards[].pins` | integer | yes |  |
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].pin_id` | string | yes |  |
+| `items[].board_id` | string | yes |  |
+| `items[].board_name` | string | yes |  |
+| `items[].title` | string or null |  | Untrusted text. Render as plain text. |
+| `items[].description` | string or null |  | Untrusted text. Render as plain text. |
+| `items[].image_url` | string or null |  | A Pinterest CDN address (i.pinimg.com). |
+| `items[].image_status` | `none` / `pending_detector` / `cached` / `rejected` / `failed` | yes |  |
+| `items[].imported_at` | string (date-time) | yes |  |
+| `next_before` | string or null (date-time) | yes |  |
+
+```json
+{
+  "account": {
+    "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+    "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+    "provider": "pinterest",
+    "status": "active",
+    "scopes": [
+      "string"
+    ],
+    "connected_at": "2026-10-13T09:30:00Z",
+    "last_sync_at": "2026-10-13T09:30:00Z",
+    "token_expires_at": "2026-10-13T09:30:00Z",
+    "boards_imported": 0,
+    "pins_imported": 0
+  },
+  "boards": [
+    {
+      "board_id": "string",
+      "name": "string",
+      "pins": 0
+    }
+  ],
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "pin_id": "string",
+      "board_id": "string",
+      "board_name": "string",
+      "title": "string",
+      "description": "string",
+      "image_url": "string",
+      "image_status": "none",
+      "imported_at": "2026-10-13T09:30:00Z"
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z"
+}
+```
+
+### DeletionRequest
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `user_id` | string (uuid) | yes | The account that was deleted. |
+| `state` | `scheduled` / `open` / `overdue` / `completed` / `cancelled` | yes |  |
+| `requested_at` | string (date-time) | yes |  |
+| `purge_after` | string or null (date-time) |  | When the data is removed. |
+| `sla_due_at` | string (date-time) | yes |  |
+| `completed_at` | string or null (date-time) |  |  |
+| `cancelled_at` | string or null (date-time) |  |  |
+| `days_left` | integer or null |  | Negative when overdue. Null once completed. |
+| `modules_pending` | array of string | yes | Modules that have not confirmed yet. |
+| `modules_done` | array of string | yes |  |
+| `third_parties_done` | array of string | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "state": "scheduled",
+  "requested_at": "2026-10-13T09:30:00Z",
+  "purge_after": "2026-10-13T09:30:00Z",
+  "sla_due_at": "2026-10-13T09:30:00Z",
+  "completed_at": "2026-10-13T09:30:00Z",
+  "cancelled_at": "2026-10-13T09:30:00Z",
+  "days_left": 0,
+  "modules_pending": [
+    "string"
+  ],
+  "modules_done": [
+    "string"
+  ],
+  "third_parties_done": [
+    "string"
+  ]
+}
+```
+
+### DeletionRequestList
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].user_id` | string (uuid) | yes | The account that was deleted. |
+| `items[].state` | `scheduled` / `open` / `overdue` / `completed` / `cancelled` | yes |  |
+| `items[].requested_at` | string (date-time) | yes |  |
+| `items[].purge_after` | string or null (date-time) |  | When the data is removed. |
+| `items[].sla_due_at` | string (date-time) | yes |  |
+| `items[].completed_at` | string or null (date-time) |  |  |
+| `items[].cancelled_at` | string or null (date-time) |  |  |
+| `items[].days_left` | integer or null |  | Negative when overdue. Null once completed. |
+| `items[].modules_pending` | array of string | yes | Modules that have not confirmed yet. |
+| `items[].modules_done` | array of string | yes |  |
+| `items[].third_parties_done` | array of string | yes |  |
+| `next_before` | string or null (date-time) | yes |  |
+| `summary` | object | yes |  |
+| `summary.scheduled` | integer | yes |  |
+| `summary.open` | integer | yes |  |
+| `summary.overdue` | integer | yes |  |
+| `summary.due_within_5_days` | integer | yes |  |
+| `summary.completed` | integer | yes |  |
+| `summary.cancelled` | integer | yes |  |
+
+```json
+{
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "user_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "state": "scheduled",
+      "requested_at": "2026-10-13T09:30:00Z",
+      "purge_after": "2026-10-13T09:30:00Z",
+      "sla_due_at": "2026-10-13T09:30:00Z",
+      "completed_at": "2026-10-13T09:30:00Z",
+      "cancelled_at": "2026-10-13T09:30:00Z",
+      "days_left": 0,
+      "modules_pending": [
+        "string"
+      ],
+      "modules_done": [
+        "string"
+      ],
+      "third_parties_done": [
+        "string"
+      ]
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z",
+  "summary": {
+    "scheduled": 0,
+    "open": 0,
+    "overdue": 0,
+    "due_within_5_days": 0,
+    "completed": 0,
+    "cancelled": 0
+  }
+}
+```
+
+### Account
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `username` | string or null |  |  |
+| `email_masked` | string or null |  |  |
+| `status` | string | yes |  |
+| `created_at` | string (date-time) | yes |  |
+| `quiz_completed` | boolean | yes |  |
+| `restricted` | boolean | yes | The person restricted processing. |
+| `integrations` | array of string | yes |  |
+| `deletion_scheduled` | boolean |  | Waiting out the deletion period. |
+| `purge_after` | string or null (date-time) |  |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "username": "string",
+  "email_masked": "a***@e***.com",
+  "status": "string",
+  "created_at": "2026-10-13T09:30:00Z",
+  "quiz_completed": true,
+  "restricted": true,
+  "integrations": [
+    "string"
+  ],
+  "deletion_scheduled": true,
+  "purge_after": "2026-10-13T09:30:00Z"
+}
+```
+
+### AccountList
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].username` | string or null |  |  |
+| `items[].email_masked` | string or null |  |  |
+| `items[].status` | string | yes |  |
+| `items[].created_at` | string (date-time) | yes |  |
+| `items[].quiz_completed` | boolean | yes |  |
+| `items[].restricted` | boolean | yes | The person restricted processing. |
+| `items[].integrations` | array of string | yes |  |
+| `items[].deletion_scheduled` | boolean |  | Waiting out the deletion period. |
+| `items[].purge_after` | string or null (date-time) |  |  |
+| `next_before` | string or null (date-time) | yes |  |
+
+```json
+{
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "username": "string",
+      "email_masked": "a***@e***.com",
+      "status": "string",
+      "created_at": "2026-10-13T09:30:00Z",
+      "quiz_completed": true,
+      "restricted": true,
+      "integrations": [
+        "string"
+      ],
+      "deletion_scheduled": true,
+      "purge_after": "2026-10-13T09:30:00Z"
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z"
 }
 ```
 

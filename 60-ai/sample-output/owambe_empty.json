@@ -1,0 +1,58 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [],
+    "occasion": "owambe",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "d5aecc92-af6a-4afc-84b7-dcf49a9e65ec",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "7b4f1a2d-a9e9-484e-842d-77604dc00ffe",
+        "job_id": "d5aecc92-af6a-4afc-84b7-dcf49a9e65ec",
+        "parent": null,
+        "mode": "archetype",
+        "pack_hash": "30bc33ee0b00fc608f6c",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [],
+        "slot_map": {},
+        "template": "archetype",
+        "confidence": 0.0,
+        "archetype": {
+          "name": "Royal blue agbada set with a fila",
+          "occasions": [
+            "owambe",
+            "wedding"
+          ],
+          "weather": {
+            "min_c": 22.0,
+            "max_c": 34.0
+          },
+          "pieces": [
+            "royal blue agbada",
+            "royal blue fila",
+            "tan sandals"
+          ],
+          "why_this_works": "The full agbada is the clearest way to dress for a celebration, and one colour for the robe and fila keeps it dignified."
+        },
+        "card_id": "sc_her_m_owambe_01",
+        "card_hash": "93beec1d063f3cd3"
+      }
+    ],
+    "mode": "archetype",
+    "warnings": []
+  }
+}

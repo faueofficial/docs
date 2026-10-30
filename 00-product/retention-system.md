@@ -45,6 +45,8 @@ A user at session 30 cannot switch to a competitor without losing all of that. T
 
 Scheduled by the `lifecycle` worker. All require `marketing_comms` except where noted.
 
+**What is built (October 2026):** every row that does not need the looks themselves. D5, D7, D10, D14, D21, D30, D45 and D60 run from `app/modules/lifecycle`, with the frequency discipline of section 6 enforced in code. **Not built:** D1 and D3, which depend on whether a look was generated or saved; that data lives in the ASE. The worker is off until `lifecycle_enabled` is switched on in the console.
+
 | Day | Trigger | Message | Purpose |
 |---|---|---|---|
 | D0 | Quiz completed | DNA card ready *(essential)* | Deliver the shareable artefact |
@@ -109,6 +111,8 @@ Immediate, tied to what the user just did. These outperform scheduled messages b
 | Quiet hours | 21:00 – 07:00 WAT, absolute |
 | Backoff | After 3 consecutive ignores, pause 7 days |
 | Hard stop | After 6 unopened messages, marketing stops entirely |
+
+"Opened" is the inbox item being read in the app: it is the one signal FAUE can trust, because email open pixels are blocked by default on most phones and a push is not an open. A message is only counted as ignored after 48 hours.
 
 The backoff rule matters more than it appears. **Opt-out is nearly irreversible**, so backing off is always cheaper than pushing through. An app that keeps talking to someone who has stopped listening gets muted permanently, and a muted app has no retention channel left at all.
 

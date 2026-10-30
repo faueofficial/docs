@@ -1,0 +1,90 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [],
+    "occasion": "wedding",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "2feaf7db-6735-4a80-ae99-59e6bddb1821",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "edff4449-64ac-4d58-b857-4ef437e0a21c",
+        "job_id": "2feaf7db-6735-4a80-ae99-59e6bddb1821",
+        "parent": null,
+        "mode": "archetype",
+        "pack_hash": "a69fed1fc11fde442813",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [],
+        "slot_map": {},
+        "template": "archetype",
+        "confidence": 0.0,
+        "archetype": {
+          "name": "White senator set with contrast piping",
+          "occasions": [
+            "church",
+            "wedding",
+            "funeral"
+          ],
+          "weather": {
+            "min_c": 24.0,
+            "max_c": 36.0
+          },
+          "pieces": [
+            "white senator top",
+            "white trousers",
+            "brown slip-on shoes"
+          ],
+          "why_this_works": "One clean colour from top to trousers looks sharp and dignified for a service, and cotton stays cool in the heat. The thin dark piping gives it detail without fuss."
+        },
+        "card_id": "sc_cls_m_church_01",
+        "card_hash": "8ca034709611ed30"
+      },
+      {
+        "id": "14bf38e4-2835-4236-97c7-80143dfdf917",
+        "job_id": "2feaf7db-6735-4a80-ae99-59e6bddb1821",
+        "parent": null,
+        "mode": "archetype",
+        "pack_hash": "a69fed1fc11fde442813",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [],
+        "slot_map": {},
+        "template": "archetype",
+        "confidence": 0.0,
+        "archetype": {
+          "name": "Royal blue agbada set with a fila",
+          "occasions": [
+            "owambe",
+            "wedding"
+          ],
+          "weather": {
+            "min_c": 22.0,
+            "max_c": 34.0
+          },
+          "pieces": [
+            "royal blue agbada",
+            "royal blue fila",
+            "tan sandals"
+          ],
+          "why_this_works": "The full agbada is the clearest way to dress for a celebration, and one colour for the robe and fila keeps it dignified."
+        },
+        "card_id": "sc_her_m_owambe_01",
+        "card_hash": "93beec1d063f3cd3"
+      }
+    ],
+    "mode": "archetype",
+    "warnings": []
+  }
+}

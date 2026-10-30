@@ -34,6 +34,18 @@ tags:
     description: 'Website messages: read, mark and reply.'
   - name: admin-waitlist
     description: 'Early-access members: read, invite, write to, mark as left, delete.'
+  - name: admin-integrations
+    description: 'Connected accounts and the pins imported through them.'
+  - name: admin-lifecycle
+    description: 'Lifecycle campaigns: state and results.'
+  - name: admin-settings
+    description: 'Tunable, non-secret values: thresholds, limits and clean-up periods.'
+  - name: admin-flags
+    description: 'Feature switches: pause a feature without a deploy.'
+  - name: admin-media
+    description: 'Uploads, storage, backup and sharing, as counts.'
+  - name: admin-privacy
+    description: 'Deletion requests, and accounts: reveal an address, delete an account.'
 
 paths:
   /auth/link/request:
@@ -604,6 +616,360 @@ paths:
         '409': { description: The member unsubscribed }
         '422': { description: Invalid subject or body }
 
+  /integrations:
+    get:
+      tags: [admin-integrations]
+      summary: Connected accounts
+      description: '`Capability: integration.read`. Newest connection first. Tokens are never returned. Audited. `summary` counts the whole set.'
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, syncing, needs_reauth, revoked] } }
+        - { name: provider, in: query, schema: { type: string, enum: [pinterest] } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/IntegrationList' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /integrations/{account_id}/pins:
+    get:
+      tags: [admin-integrations]
+      summary: Pins imported through one connection
+      description: '`Capability: integration.read_pins`. Newest first, with the boards they came from. Titles and descriptions are text written by strangers on Pinterest: render as plain text. Audited.'
+      parameters:
+        - { name: account_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: board_id, in: query, schema: { type: string } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PinList' } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such connected account }
+
+  /integrations/{account_id}:
+    delete:
+      tags: [admin-integrations]
+      summary: Disconnect on the person's behalf
+      description: '`Capability: integration.write`. Deletes the stored token and every pin imported through it. The person is not notified. Audited.'
+      parameters:
+        - { name: account_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Disconnected }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such connected account }
+
+  /privacy/requests:
+    get:
+      tags: [admin-privacy]
+      summary: Deletion requests
+      description: '`Capability: deletion_ledger.read`. The deletion ledger. Unfinished requests come soonest deadline first. `scheduled` is inside the waiting period: the account is signed out but nothing has been removed and it can be cancelled. `summary` counts the whole ledger.'
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [scheduled, open, overdue, completed, cancelled] } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/DeletionRequestList' } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /privacy/requests/{ledger_id}/acknowledge:
+    post:
+      tags: [admin-privacy]
+      summary: Record a module as purged
+      description: '`Capability: deletion_ledger.write`. Verify first (see the DSR runbook). The note is kept in the audit log. The request closes when every module has been recorded. `409` for a module that is not part of the request.'
+      parameters:
+        - { name: ledger_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [module, note]
+              properties:
+                module: { type: string, example: ase }
+                note: { type: string, minLength: 5, maxLength: 500 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/DeletionRequest' } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such request }
+        '409': { description: The module is not part of this request }
+
+  /accounts:
+    get:
+      tags: [admin-privacy]
+      summary: Accounts
+      description: '`Capability: user.read`. Newest first. Addresses are masked. `q` is the start of a username, or a full email address. Audited.'
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 254 } }
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AccountList' } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /accounts/{user_id}/reveal:
+    post:
+      tags: [admin-privacy]
+      summary: Reveal an account's email address
+      description: '`Capability: user.read_pii`. A reason of at least 10 characters is required and is stored in the audit log.'
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Justification' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string } } } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such account }
+        '422': { description: Reason missing or too short }
+
+  /accounts/{user_id}/delete:
+    post:
+      tags: [admin-privacy]
+      summary: Schedule an account for deletion
+      description: |
+        `Capability: user.delete`. The same as the person's own request: sessions end at once and the data
+        is removed after the waiting period, during which `restore` undoes it. `immediate: true` removes it
+        at the next purge pass instead and cannot then be undone. Idempotent while a request is open. A
+        reason of at least 10 characters is required and is stored in the audit log.
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/Justification' }
+                - { type: object, properties: { immediate: { type: boolean, default: false } } }
+      responses:
+        '202': { description: Scheduled, content: { application/json: { schema: { type: object, required: [ledger_id, sla_due_at], properties: { ledger_id: { type: string, format: uuid }, sla_due_at: { type: string, format: date-time }, purge_after: { type: [string, 'null'], format: date-time } } } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such account }
+        '422': { description: Reason missing or too short }
+
+  /accounts/{user_id}/restore:
+    post:
+      tags: [admin-privacy]
+      summary: Cancel a scheduled deletion
+      description: '`Capability: user.delete`. Only before the data is removed (`409` after). The person signs in as normal. A reason is required and audited.'
+      parameters:
+        - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Justification' }
+      responses:
+        '200': { description: Restored, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [restored] } } } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '409': { description: Nothing waiting, or already removed }
+
+  /media/overview:
+    get:
+      tags: [admin-media]
+      summary: Uploads and storage
+      description: '`Capability: media.read`. Counts only: what is stored and refused, where, whether the backup is keeping up, and what the clean-up has left. No image, key or address.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /sharing/overview:
+    get:
+      tags: [admin-media]
+      summary: Sharing, in and out
+      description: '`Capability: media.read`. `to_faue` counts looks shared to FAUE by source; `from_faue` counts cards shared out by kind and surface, and shared links opened (which includes chat link previews).'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /community/overview:
+    get:
+      tags: [admin-community]
+      summary: Community counts
+      description: '`Capability: community.read`. Posts by status, likes, copies and reports, shared per day, report reasons, and styles and occasions on show. Counts only: no author.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /community/posts:
+    get:
+      tags: [admin-community]
+      summary: Shared looks
+      description: '`Capability: community.read`. `reported=true` lists published posts with reports, most reported first. Otherwise newest first, filtered by `status` (`published`, `hidden`, `removed`). Posts carry no author.'
+      parameters:
+        - { in: query, name: status, schema: { type: string, enum: [published, hidden, removed] } }
+        - { in: query, name: reported, schema: { type: boolean } }
+        - { in: query, name: before, schema: { type: string, format: date-time } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /community/posts/{post_id}/reports:
+    get:
+      tags: [admin-community]
+      summary: Why a post was reported
+      description: '`Capability: community.read`. Report reasons with counts. Not who reported.'
+      parameters:
+        - { in: path, name: post_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such post }
+
+  /community/posts/{post_id}/moderate:
+    post:
+      tags: [admin-community]
+      summary: Hide a post or bring it back
+      description: |
+        `Capability: community.moderate`. `hide` removes the post from the feed and stops its author sharing the same look
+        again; `restore` shows it again. A reason of at least three characters is required and goes in the audit log
+        (`community.hide`, `community.restore`). A post its author took down cannot be restored by a moderator (409).
+      parameters:
+        - { in: path, name: post_id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [hide, restore] }
+                reason: { type: string, minLength: 3, maxLength: 300 }
+      responses:
+        '200': { description: The post as it now stands, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such post }
+        '409': { description: Already in that state, or taken down by its author }
+
+  /flags:
+    get:
+      tags: [admin-flags]
+      summary: Feature switches
+      description: '`Capability: flags.read`. Every switch with its default, current value and who last changed it. `enabled: true` means the feature is working.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /flags/{key}:
+    put:
+      tags: [admin-flags]
+      summary: Turn a switch off or on
+      description: |
+        `Capability: flags.write`. Keys: `service` (whole product API into maintenance), `uploads`,
+        `pinterest`, `shares`, `waitlist_signups`. A paused feature answers `503`. Takes effect
+        within about ten seconds on every instance. A reason of at least 5 characters is
+        required and is written to the audit log.
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, reason]
+              properties:
+                enabled: { type: boolean }
+                reason: { type: string, minLength: 5, maxLength: 300 }
+      responses:
+        '200': { description: The switch after the change }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '404': { description: No such switch }
+
+  /waitlist/invite-batch:
+    post:
+      tags: [admin-waitlist]
+      summary: Invite the next people on the list
+      description: |
+        `Capability: waitlist.write`. Sends the launch invite to the next `limit` (1 to 50) members
+        who are still `waiting`, oldest first, optionally only one dominant style. Never selects
+        anyone invited, joined or unsubscribed. Each person is committed on their own, so a
+        provider failure part way leaves the ones already sent invited. `dry_run` only counts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit: { type: integer, minimum: 1, maximum: 50, default: 25 }
+                dominant: { type: string, maxLength: 4 }
+                dry_run: { type: boolean, default: false }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { selected: { type: integer }, invited: { type: integer }, failed: { type: integer }, dry_run: { type: boolean }, still_waiting: { type: integer } } } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /waitlist/export.csv:
+    get:
+      tags: [admin-waitlist]
+      summary: Export the waitlist as CSV
+      description: |
+        `Capability: user.export`. Email, username, status, styles, gender and dates. `reason` (10 to
+        300 characters) is required and is kept in the audit log with the row count. Members who
+        unsubscribed are left out unless `status=unsubscribed` is asked for. Cells that begin with
+        `=`, `+`, `-` or `@` are prefixed so a spreadsheet does not run them.
+      parameters:
+        - { name: reason, in: query, required: true, schema: { type: string, minLength: 10, maxLength: 300 } }
+        - { name: status, in: query, schema: { type: string, enum: [waiting, invited, joined, unsubscribed] } }
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '422': { description: Reason missing or too short }
+
+  /settings:
+    get:
+      tags: [admin-settings]
+      summary: Tunable settings
+      description: '`Capability: settings.read`. Each with its type, bounds, default and what is in force. Secrets, keys and addresses are not tunable and are not listed.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /settings/{key}:
+    put:
+      tags: [admin-settings]
+      summary: Change a setting
+      description: '`Capability: settings.write`. Checked against the type and bounds in the list (`422` outside them); a reason of at least 5 characters is required and audited. Takes effect within about ten seconds; workers pick it up on their next pass.'
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value, reason]
+              properties:
+                value: { description: A number or a boolean, per the setting's `kind`. }
+                reason: { type: string, minLength: 5, maxLength: 300 }
+      responses:
+        '200': { description: The setting after the change }
+        '404': { description: Not a tunable setting }
+        '422': { description: Wrong type or outside the bounds }
+    delete:
+      tags: [admin-settings]
+      summary: Return a setting to its default
+      description: '`Capability: settings.write`.'
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The setting at its default }
+        '404': { description: Not a tunable setting }
+
+  /lifecycle/overview:
+    get:
+      tags: [admin-lifecycle]
+      summary: Campaigns, state and results
+      description: '`Capability: ops.read`. Whether campaigns are on (`lifecycle_enabled` under Settings), how many people agreed to marketing, and for each message what was sent and opened in the last 30 days. Counts only.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
 components:
   securitySchemes:
     adminBearer:
@@ -952,6 +1318,128 @@ components:
               channel: { type: string }
               status: { type: string }
               count: { type: integer }
+
+    Justification:
+      type: object
+      required: [justification]
+      properties:
+        justification: { type: string, minLength: 10, maxLength: 500 }
+
+    ConnectedAccount:
+      type: object
+      required: [id, user_id, provider, status, scopes, connected_at, boards_imported, pins_imported]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        provider: { type: string, enum: [pinterest] }
+        status: { type: string, enum: [active, syncing, needs_reauth, revoked] }
+        scopes: { type: array, items: { type: string } }
+        connected_at: { type: string, format: date-time }
+        last_sync_at: { type: [string, 'null'], format: date-time }
+        token_expires_at: { type: [string, 'null'], format: date-time }
+        boards_imported: { type: integer }
+        pins_imported: { type: integer }
+
+    IntegrationList:
+      type: object
+      required: [items, next_before, summary]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ConnectedAccount' } }
+        next_before: { type: [string, 'null'], format: date-time }
+        summary:
+          type: object
+          required: [by_status, connected, pins_imported]
+          properties:
+            by_status: { type: object, additionalProperties: { type: integer }, example: { active: 12, needs_reauth: 1 } }
+            connected: { type: integer }
+            pins_imported: { type: integer }
+
+    ImportedPin:
+      type: object
+      required: [id, pin_id, board_id, board_name, image_status, imported_at]
+      properties:
+        id: { type: string, format: uuid }
+        pin_id: { type: string }
+        board_id: { type: string }
+        board_name: { type: string }
+        title: { type: [string, 'null'], description: Untrusted text. Render as plain text. }
+        description: { type: [string, 'null'], description: Untrusted text. Render as plain text. }
+        image_url: { type: [string, 'null'], description: A Pinterest CDN address (i.pinimg.com). }
+        image_status: { type: string, enum: [none, pending_detector, cached, rejected, failed] }
+        imported_at: { type: string, format: date-time }
+
+    PinList:
+      type: object
+      required: [account, boards, items, next_before]
+      properties:
+        account: { $ref: '#/components/schemas/ConnectedAccount' }
+        boards:
+          type: array
+          items:
+            type: object
+            required: [board_id, name, pins]
+            properties:
+              board_id: { type: string }
+              name: { type: string }
+              pins: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/ImportedPin' } }
+        next_before: { type: [string, 'null'], format: date-time }
+
+    DeletionRequest:
+      type: object
+      required: [id, user_id, state, requested_at, sla_due_at, modules_pending, modules_done, third_parties_done]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid, description: The account that was deleted. }
+        state: { type: string, enum: [scheduled, open, overdue, completed, cancelled] }
+        requested_at: { type: string, format: date-time }
+        purge_after: { type: [string, 'null'], format: date-time, description: When the data is removed. }
+        sla_due_at: { type: string, format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }
+        cancelled_at: { type: [string, 'null'], format: date-time }
+        days_left: { type: [integer, 'null'], description: Negative when overdue. Null once completed. }
+        modules_pending: { type: array, items: { type: string }, description: Modules that have not confirmed yet. }
+        modules_done: { type: array, items: { type: string } }
+        third_parties_done: { type: array, items: { type: string } }
+
+    DeletionRequestList:
+      type: object
+      required: [items, next_before, summary]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/DeletionRequest' } }
+        next_before: { type: [string, 'null'], format: date-time }
+        summary:
+          type: object
+          required: [scheduled, open, overdue, due_within_5_days, completed, cancelled]
+          properties:
+            scheduled: { type: integer }
+            open: { type: integer }
+            overdue: { type: integer }
+            due_within_5_days: { type: integer }
+            completed: { type: integer }
+            cancelled: { type: integer }
+
+    Account:
+      type: object
+      required: [id, status, created_at, quiz_completed, restricted, integrations]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: [string, 'null'] }
+        email_masked: { type: [string, 'null'], example: 'a***@e***.com' }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+        quiz_completed: { type: boolean }
+        restricted: { type: boolean, description: The person restricted processing. }
+        integrations: { type: array, items: { type: string } }
+        deletion_scheduled: { type: boolean, description: Waiting out the deletion period. }
+        purge_after: { type: [string, 'null'], format: date-time }
+
+    AccountList:
+      type: object
+      required: [items, next_before]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Account' } }
+        next_before: { type: [string, 'null'], format: date-time }
 
     Problem:
       type: object

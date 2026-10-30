@@ -9,21 +9,22 @@ Every endpoint the mobile app and the website use, with request and response sch
 ## Contents
 
 - [auth](#auth) (7)
-- [profile](#profile) (6)
+- [profile](#profile) (10)
 - [quiz](#quiz) (6)
-- [vault](#vault) (7)
+- [vault](#vault) (8)
 - [looks](#looks) (11)
 - [fabric](#fabric) (2)
 - [spree](#spree) (3)
 - [agent](#agent) (4)
 - [integrations](#integrations) (6)
-- [notifications](#notifications) (5)
+- [notifications](#notifications) (6)
 - [uploads](#uploads) (3)
-- [privacy](#privacy) (3)
+- [privacy](#privacy) (7)
 - [contact](#contact) (1)
 - [early-access](#early-access) (1)
 - [cards](#cards) (2)
 - [unsubscribe](#unsubscribe) (2)
+- [shares](#shares) (6)
 
 ## auth
 
@@ -49,11 +50,13 @@ the link is opened on a different device, the landing page falls back to a
 |---|---|---|---|
 | `email` | string (email) | yes |  |
 | `session_challenge` | string | yes | Client-generated opaque value binding the request to this device. |
+| `surface` | `app` / `web` |  | Where the person is signing in, which decides where the emailed link opens. `app` (the default) opens on the site's own address, which the mobile app claims. `web` opens on the web app's address, which always stays in the browser. Send what is true; a link has to open on the surface that holds the session challenge. |
 
 ```json
 {
   "email": "ada@example.com",
-  "session_challenge": "string"
+  "session_challenge": "string",
+  "surface": "app"
 }
 ```
 
@@ -777,6 +780,101 @@ purpose. Revoking `ai_processing` disables generation; revoking
 }
 ```
 
+
+### `GET /me/phone`
+
+**The saved phone number**
+
+`MVP` Masked, with whether it is verified.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `phone` | string or null |  |  |
+| `verified` | boolean |  |  |
+
+```json
+{
+  "phone": "+234******678",
+  "verified": true
+}
+```
+
+
+### `PUT /me/phone`
+
+**Save a number and send it a code**
+
+`MVP` Sends a six digit code by SMS, or by WhatsApp with `via`. A Nigerian number may be given
+as `0803...`. Until the code is entered the number is unverified and nothing else is sent to
+it. Limited to 3 an hour and 5 a day. `503` when the channel is not available.
+
+**Auth:** bearer token
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `phone` | string | yes |  |
+| `via` | `sms` / `whatsapp` |  |  |
+
+```json
+{
+  "phone": "string",
+  "via": "sms"
+}
+```
+
+**Responses**
+
+- **202**: Code sent
+- **422**: Not a valid number
+- **503**: SMS or WhatsApp is not available
+
+### `DELETE /me/phone`
+
+**Forget the number**
+
+`MVP` SMS and WhatsApp stop at once.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **204**: Removed
+
+### `POST /me/phone/verify`
+
+**Enter the code**
+
+`MVP` Ten minutes and five tries, then ask for a new code (`409`).
+
+**Auth:** bearer token
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `code` | string | yes |  |
+
+```json
+{
+  "code": "string"
+}
+```
+
+**Responses**
+
+- **200**: Verified
+- **409**: Expired
+- **422**: Wrong code
 
 ## quiz
 
@@ -1536,6 +1634,27 @@ Returns a job envelope; see `/looks/jobs/{job_id}`.
 
 - **403**: A required consent purpose has not been granted. Present the consent surface for the purpose named in `errors[0].field`, not a generic error.
   - body: `application/problem+json`, see *Errors* in the guide
+
+### `POST /vault/items/{item_id}/restore`
+
+**Restore a deleted item**
+
+`MVP` Deleting an item only hides it. It can be restored for 30 days; after that the images are removed from every store and this is `409`. Wear history keeps the item's name and category either way.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `item_id` | path | string (uuid) | yes |  |
+
+**Responses**
+
+- **200**: Restored
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
+- **409**: Past the retention period
 
 ### `POST /vault/wear`
 
@@ -2568,7 +2687,7 @@ Pinterest
 
 **List connected accounts**
 
-`MVP` Backs the Connected Accounts screen. Instagram is not offered — the platform API cannot deliver what it would promise.
+`MVP` Backs the Connected Accounts screen. `status` is `needs_reauth` when Pinterest rejected the stored token (show Connect again) and `syncing` while an import runs (poll this until it changes). Instagram is not offered — the platform API cannot deliver what it would promise.
 
 **Auth:** bearer token
 
@@ -2609,7 +2728,7 @@ Pinterest
 
 **Begin Pinterest connection**
 
-`MVP` `Consent: pinterest_sync` Returns an OAuth2 + PKCE authorization URL. Read-only scopes only.
+`MVP` `Consent: pinterest_sync` Returns the Pinterest authorization URL (authorization code flow; read-only scopes `boards:read` and `pins:read`). Open it in the browser. After the person decides, Pinterest calls the callback, which redirects the browser into the app with `?pinterest=connected`, `denied` or `error`. `state` is single use and valid for 10 minutes. `503` when the app has no Pinterest credentials.
 
 **Auth:** bearer token
 
@@ -2633,12 +2752,13 @@ Pinterest
 
 - **403**: A required consent purpose has not been granted. Present the consent surface for the purpose named in `errors[0].field`, not a generic error.
   - body: `application/problem+json`, see *Errors* in the guide
+- **503**: Pinterest is not configured or not answering
 
 ### `GET /integrations/pinterest/callback`
 
 **OAuth callback**
 
-`MVP` Called by Pinterest. Exchanges the code, stores encrypted tokens, and redirects back into the app.
+`MVP` Called by Pinterest, not by the client. Checks and consumes `state`, exchanges the code, stores the tokens encrypted, and redirects into the app. It never returns an error body: the outcome is the `pinterest` query parameter on the redirect (`connected`, `denied` when the person declined, `error` for anything else).
 
 **Auth:** none
 
@@ -2646,18 +2766,19 @@ Pinterest
 
 | Name | In | Type | Required | Notes |
 |---|---|---|---|---|
-| `code` | query | string | yes |  |
-| `state` | query | string | yes |  |
+| `code` | query | string |  |  |
+| `state` | query | string |  |  |
+| `error` | query | string |  |  |
 
 **Responses**
 
-- **302**: Redirect into the app
+- **302**: Redirect into the app with ?pinterest=connected, denied or error
 
 ### `GET /integrations/pinterest/boards`
 
 **List boards**
 
-`MVP` The user chooses which boards to import. Never import everything by default.
+`MVP` `Consent: pinterest_sync` The signed-in person's own boards, for them to choose from. Never import everything by default. `imported` is true for a board imported before. `404` when Pinterest is not connected, `409` when it needs reconnecting, `403` when Pinterest refuses the content (not retryable), `503` when Pinterest is not answering.
 
 **Auth:** bearer token
 
@@ -2689,12 +2810,17 @@ Pinterest
 ]
 ```
 
+- **403**: A required consent purpose has not been granted. Present the consent surface for the purpose named in `errors[0].field`, not a generic error.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
+- **409**: Needs reconnecting, or an import is already running
 
 ### `POST /integrations/pinterest/import`
 
 **Import selected boards**
 
-`MVP` Asynchronous. Pins are cached through the PII pipeline and embedded into the aspiration vector.
+`MVP` `Consent: pinterest_sync` Asynchronous. Imports up to 200 pins from each chosen board, at most 10 boards per request. Every id must be a board of the connected account, otherwise `422`. `409` while another import is running. Poll `GET /integrations` until `status` is no longer `syncing`. Pin images are not copied until they can pass the PII pipeline; until then a pin keeps its Pinterest image address.
 
 **Auth:** bearer token
 
@@ -2736,12 +2862,18 @@ Pinterest
 }
 ```
 
+- **403**: A required consent purpose has not been granted. Present the consent surface for the purpose named in `errors[0].field`, not a generic error.
+  - body: `application/problem+json`, see *Errors* in the guide
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
+- **409**: Needs reconnecting, or an import is already running
+- **422**: Empty choice, too many boards, or a board that is not in the account
 
 ### `DELETE /integrations/{provider}`
 
 **Disconnect**
 
-`MVP` Revokes the upstream token, deletes cached pins, and removes the aspiration vector.
+`MVP` Deletes the stored token and every imported pin. Never gated by consent, and safe to repeat. Pinterest documents no token-revocation call, so access ends by deleting ours; the person can also remove FAUE in Pinterest's own settings. Withdrawing `pinterest_sync` does the same.
 
 **Auth:** bearer token
 
@@ -2754,6 +2886,8 @@ Pinterest
 **Responses**
 
 - **204**: Disconnected
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
 
 ## notifications
 
@@ -2763,7 +2897,7 @@ Inbox, preferences, device tokens
 
 **Notification inbox**
 
-`MVP` Backs the Notification screen. `category` maps to its All / Style / Activity tabs.
+`MVP` Backs the Notification screen, newest first, with the unread count for the badge. `category` maps to its All / Style / Activity tabs.
 
 **Auth:** bearer token
 
@@ -2840,7 +2974,7 @@ Inbox, preferences, device tokens
 
 **Get preferences**
 
-`MVP` Per category and channel, plus quiet hours.
+`MVP` Every category on every channel (15 entries), with the default where the person never chose. Marketing is off until turned on.
 
 **Auth:** bearer token
 
@@ -2877,7 +3011,7 @@ Inbox, preferences, device tokens
 
 **Update preferences**
 
-`MVP`
+`MVP` The body is the **complete** set: anything omitted reverts to its default, so read first and send back modified. A channel turned off is skipped at delivery. Quiet hours need both ends or neither. Returns the resulting set.
 
 **Auth:** bearer token
 
@@ -2907,13 +3041,39 @@ Inbox, preferences, device tokens
 
 **Responses**
 
-- **200**: Updated
+- **200**: The resulting preferences
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `` | array of object |  |  |
+| `[]` | object |  |  |
+| `[].category` | `style` / `activity` / `marketing` | yes |  |
+| `[].channel` | `push` / `email` / `whatsapp` / `sms` / `inbox` | yes |  |
+| `[].enabled` | boolean | yes |  |
+| `[].quiet_hours_start` | integer or null |  |  |
+| `[].quiet_hours_end` | integer or null |  |  |
+
+```json
+[
+  {
+    "category": "style",
+    "channel": "push",
+    "enabled": true,
+    "quiet_hours_start": 0,
+    "quiet_hours_end": 0
+  }
+]
+```
+
+- **422**: Unknown category or channel
 
 ### `POST /notifications/devices`
 
 **Register a device token**
 
-`MVP` Tokens are deleted on logout and on account deletion.
+`MVP` Safe to call on every launch: the same token updates its registration instead of duplicating. At most 10 devices are kept per person. Tokens are stored encrypted and deleted with the account.
 
 **Auth:** bearer token
 
@@ -2934,6 +3094,41 @@ Inbox, preferences, device tokens
 **Responses**
 
 - **201**: Registered
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `device_id` | string (uuid) | yes |  |
+| `created` | boolean | yes | False when the token was already registered. |
+
+```json
+{
+  "device_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "created": true
+}
+```
+
+
+### `DELETE /notifications/devices/{device_id}`
+
+**Remove a device**
+
+`MVP` Stop push to one device, for example on sign-out.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `device_id` | path | string (uuid) | yes |  |
+
+**Responses**
+
+- **204**: Removed
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
 
 ## uploads
 
@@ -2962,13 +3157,13 @@ cannot be referenced by other endpoints.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `kind` | `fabric` / `vault_item` / `fit` / `avatar` | yes |  |
+| `kind` | `vault` / `fabric` / `avatar` / `share` | yes | `share` is a screenshot sent with a share to FAUE. |
 | `content_type` | `image/jpeg` / `image/png` / `image/heic` / `image/webp` | yes |  |
 | `byte_size` | integer |  | Maximum 20 MB |
 
 ```json
 {
-  "kind": "fabric",
+  "kind": "vault",
   "content_type": "image/jpeg",
   "byte_size": 0
 }
@@ -3098,7 +3293,12 @@ Data subject rights
 
 **Request a data export**
 
-`MVP` Asynchronous. Produces a downloadable archive of everything held about the user.
+`MVP` Assembles everything held about the person (profile, body profile, consents, Style DNA,
+quiz answers, uploads, vault, wear log, saved looks, connected accounts and imported pins,
+notifications and waitlist entry). Sign-in secrets and stored provider tokens are not included.
+
+Returns **202** with a job; fetch `poll_url` for the archive. It is kept for seven days and
+stored encrypted.
 
 **Auth:** bearer token
 
@@ -3127,12 +3327,46 @@ Data subject rights
 ```
 
 
+### `GET /privacy/export/{export_id}`
+
+**Download a data export**
+
+`MVP` The archive as a JSON attachment. `404` once it has expired, and for anyone but the person it describes.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `export_id` | path | string (uuid) | yes |  |
+
+**Responses**
+
+- **200**: The archive
+
+  Body (`application/json`):
+
+
+
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
+
 ### `POST /privacy/delete`
 
 **Delete the account**
 
-`MVP` Irreversible. Fans out deletion across every module and third party, with
-a 30-day completion SLA.
+`MVP` Schedules the account for deletion. **Sessions end at once, on every device.**
+
+The data is **kept for a waiting period** (`purge_after`, 14 days by default) so a deletion
+made by mistake can be undone with `DELETE /privacy/delete`. Signing in during that time
+reaches only `GET` and `DELETE /privacy/delete` and `POST /auth/logout`; every other route
+returns `403 account_pending_deletion`. When the period ends everything the gateway holds
+(profile, style, uploads and their stored images, vault, imported pins, the Pinterest token,
+notifications, and the waitlist entry for the same address) is removed, and the deletion
+ledger tracks the other modules (`ase`) to the 30-day legal deadline.
+
+Asking again while a request is open returns the same one.
 
 Required by the App Store for any app offering Sign in with Apple, so this is
 launch-blocking rather than optional.
@@ -3155,7 +3389,7 @@ launch-blocking rather than optional.
 
 **Responses**
 
-- **202**: Deletion started
+- **202**: Deletion scheduled. Sign the person out and clear local data.
 
   Body (`application/json`):
 
@@ -3163,26 +3397,110 @@ launch-blocking rather than optional.
 |---|---|---|---|
 | `ledger_id` | string (uuid) | yes |  |
 | `sla_due_at` | string (date-time) | yes |  |
+| `purge_after` | string or null (date-time) |  | When the data is removed. Until then the request can be cancelled. |
 
 ```json
 {
   "ledger_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "sla_due_at": "2026-10-13T09:30:00Z",
+  "purge_after": "2026-10-13T09:30:00Z"
+}
+```
+
+- **422**: `confirm` missing or not true.
+
+### `GET /privacy/delete`
+
+**Is a deletion waiting?**
+
+`MVP` Reachable while the account is scheduled for deletion. Show the date and the cancel action.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `state` | `none` / `scheduled` | yes |  |
+| `ledger_id` | string (uuid) |  |  |
+| `requested_at` | string (date-time) |  |  |
+| `purge_after` | string (date-time) |  |  |
+| `sla_due_at` | string (date-time) |  |  |
+
+```json
+{
+  "state": "none",
+  "ledger_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "requested_at": "2026-10-13T09:30:00Z",
+  "purge_after": "2026-10-13T09:30:00Z",
   "sla_due_at": "2026-10-13T09:30:00Z"
 }
 ```
 
 
+### `DELETE /privacy/delete`
+
+**Cancel a scheduled deletion**
+
+`MVP` Only possible before `purge_after`; afterwards `409` and the data is gone. Returns a
+fresh session, because the token used here is limited to the deletion routes: **replace the
+stored tokens with the ones returned.**
+
+**Auth:** bearer token
+
+**Responses**
+
+- **200**: Cancelled
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `status` | `cancelled` | yes |  |
+| `access_token` | string | yes |  |
+| `refresh_token` | string | yes |  |
+| `expires_in` | integer | yes |  |
+
+```json
+{
+  "status": "cancelled",
+  "access_token": "string",
+  "refresh_token": "string",
+  "expires_in": 0
+}
+```
+
+- **409**: Nothing waiting, or the data has already been removed.
+
 ### `POST /privacy/restrict`
 
 **Restrict processing**
 
-`MVP` Pauses all optional processing while retaining the account.
+`MVP` Pauses all optional processing while keeping the account and its data. While it is in
+force every purpose except `essential` is refused with `403 forbidden` ("processing is
+restricted"), whatever consent was given. Nothing is deleted.
 
 **Auth:** bearer token
 
 **Responses**
 
 - **204**: Restricted
+
+### `DELETE /privacy/restrict`
+
+**Lift the restriction**
+
+`MVP` Optional processing works again under the consents the person already gave.
+
+**Auth:** bearer token
+
+**Responses**
+
+- **204**: Lifted
 
 ## contact
 
@@ -3615,6 +3933,344 @@ it, or using a link for an entry that no longer exists, still answers 200.
 ```
 
 - **401**: Missing, invalid, or expired credentials
+  - body: `application/problem+json`, see *Errors* in the guide
+
+## shares
+
+Share a look from TikTok, Instagram or Pinterest, as a link or an image
+
+### `POST /shares`
+
+**Share a look**
+
+`MVP` By link, by image, or both. Links to a single **TikTok**, **Instagram** or
+**Pinterest** post are accepted, with or without tracking parameters; short links
+(`vm.tiktok.com`, `pin.it`) are followed. Any other address is `422` with advice to
+share a screenshot.
+
+When the link gives no picture the item is kept with `status: needs_image` and a
+`reason` (`no_preview`, or `unavailable` when the post could not be read). Ask for a
+screenshot, upload it with `kind: share`, and send it to `PUT /shares/{id}/image`.
+Instagram links usually need this: Instagram no longer publishes a cover image.
+
+Sharing the same post again returns the existing item with `200`. `title` and
+`author_name` are written by strangers: show them as plain text.
+
+Limited to 30 per hour and 100 per day.
+
+**Auth:** bearer token
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `url` | string |  |  |
+| `asset_id` | string (uuid) |  | An upload with `status: ready`. |
+
+```json
+{
+  "url": "string",
+  "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10"
+}
+```
+
+**Responses**
+
+- **201**: Created
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `source` | `tiktok` / `instagram` / `pinterest` / `image` | yes |  |
+| `source_url` | string or null | yes | The canonical post address; null for an image alone. |
+| `title` | string or null |  | Untrusted text. Render as plain text. |
+| `author_name` | string or null |  | Untrusted text. Render as plain text. |
+| `thumbnail_url` | string or null |  | The platform's own preview address. Prefer the upload when `asset_id` is set. |
+| `asset_id` | string or null (uuid) |  |  |
+| `status` | `ready` / `needs_image` | yes |  |
+| `reason` | `no_preview` / `unavailable` / null |  |  |
+| `created_at` | string (date-time) | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "source": "tiktok",
+  "source_url": "string",
+  "title": "string",
+  "author_name": "string",
+  "thumbnail_url": "string",
+  "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "status": "ready",
+  "reason": "no_preview",
+  "created_at": "2026-10-13T09:30:00Z"
+}
+```
+
+- **200**: Already shared
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `source` | `tiktok` / `instagram` / `pinterest` / `image` | yes |  |
+| `source_url` | string or null | yes | The canonical post address; null for an image alone. |
+| `title` | string or null |  | Untrusted text. Render as plain text. |
+| `author_name` | string or null |  | Untrusted text. Render as plain text. |
+| `thumbnail_url` | string or null |  | The platform's own preview address. Prefer the upload when `asset_id` is set. |
+| `asset_id` | string or null (uuid) |  |  |
+| `status` | `ready` / `needs_image` | yes |  |
+| `reason` | `no_preview` / `unavailable` / null |  |  |
+| `created_at` | string (date-time) | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "source": "tiktok",
+  "source_url": "string",
+  "title": "string",
+  "author_name": "string",
+  "thumbnail_url": "string",
+  "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "status": "ready",
+  "reason": "no_preview",
+  "created_at": "2026-10-13T09:30:00Z"
+}
+```
+
+- **404**: The image is not yours
+- **409**: The image has not finished processing
+- **422**: Nothing to share
+- **429**: Too many requests
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `GET /shares`
+
+**Shared looks**
+
+`MVP` Newest first.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `before` | query | string (date-time) |  |  |
+| `limit` | query | integer |  |  |
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `items` | array of object | yes |  |
+| `items[]` | object |  |  |
+| `items[].id` | string (uuid) | yes |  |
+| `items[].source` | `tiktok` / `instagram` / `pinterest` / `image` | yes |  |
+| `items[].source_url` | string or null | yes | The canonical post address; null for an image alone. |
+| `items[].title` | string or null |  | Untrusted text. Render as plain text. |
+| `items[].author_name` | string or null |  | Untrusted text. Render as plain text. |
+| `items[].thumbnail_url` | string or null |  | The platform's own preview address. Prefer the upload when `asset_id` is set. |
+| `items[].asset_id` | string or null (uuid) |  |  |
+| `items[].status` | `ready` / `needs_image` | yes |  |
+| `items[].reason` | `no_preview` / `unavailable` / null |  |  |
+| `items[].created_at` | string (date-time) | yes |  |
+| `next_before` | string or null (date-time) | yes |  |
+
+```json
+{
+  "items": [
+    {
+      "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "source": "tiktok",
+      "source_url": "string",
+      "title": "string",
+      "author_name": "string",
+      "thumbnail_url": "string",
+      "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+      "status": "ready",
+      "reason": "no_preview",
+      "created_at": "2026-10-13T09:30:00Z"
+    }
+  ],
+  "next_before": "2026-10-13T09:30:00Z"
+}
+```
+
+
+### `GET /shares/{share_id}`
+
+**One shared look**
+
+`MVP`
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `share_id` | path | string (uuid) | yes |  |
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `source` | `tiktok` / `instagram` / `pinterest` / `image` | yes |  |
+| `source_url` | string or null | yes | The canonical post address; null for an image alone. |
+| `title` | string or null |  | Untrusted text. Render as plain text. |
+| `author_name` | string or null |  | Untrusted text. Render as plain text. |
+| `thumbnail_url` | string or null |  | The platform's own preview address. Prefer the upload when `asset_id` is set. |
+| `asset_id` | string or null (uuid) |  |  |
+| `status` | `ready` / `needs_image` | yes |  |
+| `reason` | `no_preview` / `unavailable` / null |  |  |
+| `created_at` | string (date-time) | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "source": "tiktok",
+  "source_url": "string",
+  "title": "string",
+  "author_name": "string",
+  "thumbnail_url": "string",
+  "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "status": "ready",
+  "reason": "no_preview",
+  "created_at": "2026-10-13T09:30:00Z"
+}
+```
+
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `DELETE /shares/{share_id}`
+
+**Remove a shared look**
+
+`MVP`
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `share_id` | path | string (uuid) | yes |  |
+
+**Responses**
+
+- **204**: Removed
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
+
+### `PUT /shares/{share_id}/image`
+
+**Attach a screenshot**
+
+`MVP` For a share with `status: needs_image`. The image must be yours and `ready`.
+
+**Auth:** bearer token
+
+**Parameters**
+
+| Name | In | Type | Required | Notes |
+|---|---|---|---|---|
+| `share_id` | path | string (uuid) | yes |  |
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `asset_id` | string (uuid) | yes |  |
+
+```json
+{
+  "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10"
+}
+```
+
+**Responses**
+
+- **200**: OK
+
+  Body (`application/json`):
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `source` | `tiktok` / `instagram` / `pinterest` / `image` | yes |  |
+| `source_url` | string or null | yes | The canonical post address; null for an image alone. |
+| `title` | string or null |  | Untrusted text. Render as plain text. |
+| `author_name` | string or null |  | Untrusted text. Render as plain text. |
+| `thumbnail_url` | string or null |  | The platform's own preview address. Prefer the upload when `asset_id` is set. |
+| `asset_id` | string or null (uuid) |  |  |
+| `status` | `ready` / `needs_image` | yes |  |
+| `reason` | `no_preview` / `unavailable` / null |  |  |
+| `created_at` | string (date-time) | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "source": "tiktok",
+  "source_url": "string",
+  "title": "string",
+  "author_name": "string",
+  "thumbnail_url": "string",
+  "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "status": "ready",
+  "reason": "no_preview",
+  "created_at": "2026-10-13T09:30:00Z"
+}
+```
+
+- **404**: Not found
+  - body: `application/problem+json`, see *Errors* in the guide
+- **409**: The image has not finished processing
+
+### `POST /share-events`
+
+**Record that a card was shared**
+
+`MVP` **No sign-in needed.** Call it when someone sends a Style DNA card to Stories or as
+a post, copies the link, or uses the share sheet. Only the kind, the surface, the card's
+dominant persona id and the time are kept: no account, address or IP address. It feeds
+the "shared from FAUE" count in the console. Limited to 120 per hour per IP address.
+
+**Auth:** none
+
+**Request body** (`application/json`)
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `kind` | `story` / `post` / `link` / `native` | yes |  |
+| `surface` | `web` / `app` |  |  |
+| `persona` | string |  |  |
+
+```json
+{
+  "kind": "story",
+  "surface": "web",
+  "persona": "CM"
+}
+```
+
+**Responses**
+
+- **204**: Recorded
+- **422**: Unknown kind
+- **429**: Too many requests
   - body: `application/problem+json`, see *Errors* in the guide
 
 ## Schemas
@@ -4095,6 +4751,36 @@ it, or using a link for an entry that no longer exists, still answers 200.
 
 ```json
 "owambe"
+```
+
+### SharedItem
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string (uuid) | yes |  |
+| `source` | `tiktok` / `instagram` / `pinterest` / `image` | yes |  |
+| `source_url` | string or null | yes | The canonical post address; null for an image alone. |
+| `title` | string or null |  | Untrusted text. Render as plain text. |
+| `author_name` | string or null |  | Untrusted text. Render as plain text. |
+| `thumbnail_url` | string or null |  | The platform's own preview address. Prefer the upload when `asset_id` is set. |
+| `asset_id` | string or null (uuid) |  |  |
+| `status` | `ready` / `needs_image` | yes |  |
+| `reason` | `no_preview` / `unavailable` / null |  |  |
+| `created_at` | string (date-time) | yes |  |
+
+```json
+{
+  "id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "source": "tiktok",
+  "source_url": "string",
+  "title": "string",
+  "author_name": "string",
+  "thumbnail_url": "string",
+  "asset_id": "3f2a9c1e-8b7d-4e55-a3c4-0d1f6b2e9a10",
+  "status": "ready",
+  "reason": "no_preview",
+  "created_at": "2026-10-13T09:30:00Z"
+}
 ```
 
 ### JobEnvelope

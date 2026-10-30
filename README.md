@@ -47,6 +47,7 @@ Watch [`30-contracts/CHANGELOG.md`](30-contracts/CHANGELOG.md). Every contract c
 3. [`70-ops/observability.md`](70-ops/observability.md) — dashboards and alerts.
 4. [`70-ops/runbooks/`](70-ops/runbooks/) — one runbook per alert.
 5. [`70-ops/incident-response.md`](70-ops/incident-response.md) — severity ladder and the breach clock.
+6. [`70-ops/pinterest-registration.md`](70-ops/pinterest-registration.md) — the Pinterest developer app: the form answers, access tiers, redirect URIs, and how to test the connection.
 
 ---
 

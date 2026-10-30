@@ -1,0 +1,217 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [
+      {
+        "id": "v-agbada",
+        "category": "native",
+        "name": "navy agbada",
+        "colours": [
+          "navy"
+        ],
+        "fabric": "aso oke"
+      },
+      {
+        "id": "v-kaftan",
+        "category": "native",
+        "name": "cream kaftan",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-sokoto",
+        "category": "bottoms",
+        "name": "cream sokoto",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-fila",
+        "category": "accessories",
+        "name": "navy fila",
+        "colours": [
+          "navy"
+        ]
+      },
+      {
+        "id": "v-white",
+        "category": "tops",
+        "name": "white shirt",
+        "colours": [
+          "white"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-blk",
+        "category": "bottoms",
+        "name": "black trousers",
+        "colours": [
+          "black"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-loaf",
+        "category": "shoes",
+        "name": "brown loafers",
+        "colours": [
+          "brown"
+        ]
+      },
+      {
+        "id": "v-sand",
+        "category": "shoes",
+        "name": "gold sandals",
+        "colours": [
+          "gold"
+        ]
+      }
+    ],
+    "occasion": "casual",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "4f2f2cd9-a112-4345-b278-5ac0e0b6c575",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "bbd76ef1-4e81-4d6e-806a-bac96f824202",
+        "job_id": "4f2f2cd9-a112-4345-b278-5ac0e0b6c575",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "f17cf2f14a8bf91ef7c3",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-white",
+          "v-blk",
+          "v-sand"
+        ],
+        "slot_map": {
+          "top": "v-white",
+          "bottom": "v-blk",
+          "shoes": "v-sand"
+        },
+        "template": "two_piece",
+        "confidence": 0.407,
+        "explanation": {
+          "title": "An easy everyday look",
+          "why": "The shirt and the trousers are a classic pairing. The formality suits casual. It is built around your white, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "two_piece",
+          "item_ids": [
+            "v-white",
+            "v-blk",
+            "v-sand"
+          ]
+        }
+      },
+      {
+        "id": "ea3d9ffb-10dc-4ff7-81e2-55cef3577e09",
+        "job_id": "4f2f2cd9-a112-4345-b278-5ac0e0b6c575",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "f17cf2f14a8bf91ef7c3",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-white",
+          "v-sokoto",
+          "v-loaf"
+        ],
+        "slot_map": {
+          "top": "v-white",
+          "bottom": "v-sokoto",
+          "shoes": "v-loaf"
+        },
+        "template": "two_piece",
+        "confidence": 0.0,
+        "explanation": {
+          "title": "An easy everyday look",
+          "why": "The formality suits casual. It is built around your white, with the other colours kept calm beside it. Chosen with today's 29 degrees in mind.",
+          "used": [
+            "neutral_anchor",
+            "occasion",
+            "occasion_label",
+            "temp_c"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "two_piece",
+          "item_ids": [
+            "v-white",
+            "v-sokoto",
+            "v-loaf"
+          ]
+        }
+      },
+      {
+        "id": "68b31fff-d556-4ec7-9bba-692e38a05487",
+        "job_id": "4f2f2cd9-a112-4345-b278-5ac0e0b6c575",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "f17cf2f14a8bf91ef7c3",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-white",
+          "v-sokoto",
+          "v-sand",
+          "v-fila"
+        ],
+        "slot_map": {
+          "top": "v-white",
+          "bottom": "v-sokoto",
+          "shoes": "v-sand",
+          "accessory": "v-fila"
+        },
+        "template": "two_piece",
+        "confidence": 0.05,
+        "explanation": {
+          "title": "An easy everyday look",
+          "why": "The formality suits casual. It is built around your white, with the other colours kept calm beside it. Chosen with today's 29 degrees in mind.",
+          "used": [
+            "neutral_anchor",
+            "occasion",
+            "occasion_label",
+            "temp_c"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "two_piece",
+          "item_ids": [
+            "v-white",
+            "v-sokoto",
+            "v-sand",
+            "v-fila"
+          ]
+        }
+      }
+    ],
+    "mode": "wardrobe",
+    "warnings": []
+  }
+}

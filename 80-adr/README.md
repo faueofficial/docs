@@ -28,3 +28,9 @@ ADRs are immutable once accepted. A decision changes by writing a new ADR that s
 | [0020](0020-style-library-licensed-not-scraped.md) | Style library imagery is licensed or generated, never scraped | High if violated |
 | [0021](0021-workspace-tenancy-model.md) | Workspace tenancy from the first migration | Low |
 | [0022](0022-canonical-domain-and-service-naming.md) | Canonical domain faueofficial.com; `ase` retained | Moderate |
+| [0024](0024-tiered-assembly.md) | Rules and a ranker assemble looks; a model only breaks ties and words (supersedes 0017 as default) | Low |
+| [0025](0025-composite-and-archetypes-default.md) | Composite is the default renderer; new people see reviewed archetype looks (supersedes 0018) | Trivial |
+| [0026](0026-attribute-first-rendering.md) | Attributes first, pixels second | Low |
+| [0027](0027-skills-are-governed-folders.md) | Skills are folders with governed references | Moderate |
+| [0028](0028-reviewer-approval-gates-production-content.md) | Cultural content reaches production only by a named reviewer's approval of its exact version | High to loosen |
+| [0023](0023-share-to-faue.md) | Looks arrive by share (link or image), not by platform connection | Low |

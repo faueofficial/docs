@@ -134,6 +134,9 @@ compromise.
 | `JWT_PUBLIC_KEY_NEXT` | Leave empty. Set only during a rotation |
 | `SERVICE_JWT_SECRET` | **Byte-identical in `api-gateway` and `ase`**, or every internal call is rejected |
 | `ASE_SERVICE_TOKEN` | Same — identical in both |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | `ase` only. Optional: with both set, tasks whose model slug starts `@cf/` (the small, free-tier models the pilots validated) use Workers AI. Without them every model task takes its template path, which is a working product |
+| `OPENROUTER_API_KEY` | `ase` only. Optional: lets a paid OpenRouter slug in `app/models/config/models.yaml` serve a tier. Never enable without a budget ceiling (`AI_BUDGET_*`) |
+| `RABBITMQ_URL` | `ase-events` as well as the gateway's workers: the broker the event consumer reads |
 | `ENCRYPTION_MASTER_KEY` | Losing this makes every encrypted column permanently unreadable. It is the one value worth storing somewhere else as well |
 | `BLIND_INDEX_PEPPER` | Rotating it invalidates every email lookup. Set once |
 
@@ -199,6 +202,23 @@ No public domain
 
 Reachable only over Railway's private network, from the gateway. If `ase` has a
 public domain, the internal-auth boundary is decoration.
+
+### `ase-events` — private
+
+The consumer for what the rest of the platform tells `ase` (the same image as `ase`, a different start command). It erases what
+`ase` holds when someone withdraws personalisation or AI consent or deletes their account (and confirms with
+`user.deletion.completed`), and forgets what was learned from a removed wardrobe item. Without it a deletion request waits
+forever for `ase` to confirm:
+
+```
+Root directory   /            (the ase repo)
+Build            Dockerfile
+Start            python -m app.workers.events
+No public domain, no health check
+```
+
+Needs `DATABASE_URL`, `RABBITMQ_URL` and the `ase` variables. It exits on an unrecoverable error so Railway restarts it; a message
+that fails twice goes to the `ase.events.dead` queue rather than blocking the rest. Handlers are idempotent, so redelivery is harmless.
 
 ### `workers` — private
 

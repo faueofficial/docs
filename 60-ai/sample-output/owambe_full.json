@@ -1,0 +1,208 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [
+      {
+        "id": "v-agbada",
+        "category": "native",
+        "name": "navy agbada",
+        "colours": [
+          "navy"
+        ],
+        "fabric": "aso oke"
+      },
+      {
+        "id": "v-kaftan",
+        "category": "native",
+        "name": "cream kaftan",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-sokoto",
+        "category": "bottoms",
+        "name": "cream sokoto",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-fila",
+        "category": "accessories",
+        "name": "navy fila",
+        "colours": [
+          "navy"
+        ]
+      },
+      {
+        "id": "v-white",
+        "category": "tops",
+        "name": "white shirt",
+        "colours": [
+          "white"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-blk",
+        "category": "bottoms",
+        "name": "black trousers",
+        "colours": [
+          "black"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-loaf",
+        "category": "shoes",
+        "name": "brown loafers",
+        "colours": [
+          "brown"
+        ]
+      },
+      {
+        "id": "v-sand",
+        "category": "shoes",
+        "name": "gold sandals",
+        "colours": [
+          "gold"
+        ]
+      }
+    ],
+    "occasion": "owambe",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "c6f4d27b-be24-4fc2-a1fa-56298dbd618d",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "9d9148d1-efab-40e0-8cff-7719ba668c78",
+        "job_id": "c6f4d27b-be24-4fc2-a1fa-56298dbd618d",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "e2d657f109730979918a",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-kaftan",
+          "v-sand"
+        ],
+        "slot_map": {
+          "native": "v-kaftan",
+          "shoes": "v-sand"
+        },
+        "template": "native_set",
+        "confidence": 0.306,
+        "explanation": {
+          "title": "An Owambe look",
+          "why": "The kaftan and the sandals are a classic pairing. The formality suits owambe. It is built around your cream, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "native_set",
+          "item_ids": [
+            "v-kaftan",
+            "v-sand"
+          ]
+        }
+      },
+      {
+        "id": "a7a6696d-7c92-4a06-bf00-027907cc4438",
+        "job_id": "c6f4d27b-be24-4fc2-a1fa-56298dbd618d",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "e2d657f109730979918a",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-white",
+          "v-blk",
+          "v-loaf"
+        ],
+        "slot_map": {
+          "top": "v-white",
+          "bottom": "v-blk",
+          "shoes": "v-loaf"
+        },
+        "template": "two_piece",
+        "confidence": 0.139,
+        "explanation": {
+          "title": "An Owambe look",
+          "why": "The shirt and the trousers are a classic pairing. The formality suits owambe. It is built around your white, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "two_piece",
+          "item_ids": [
+            "v-white",
+            "v-blk",
+            "v-loaf"
+          ]
+        }
+      },
+      {
+        "id": "6da6531a-e027-49fb-bb14-a978e93f6adb",
+        "job_id": "c6f4d27b-be24-4fc2-a1fa-56298dbd618d",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "e2d657f109730979918a",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-agbada",
+          "v-sand"
+        ],
+        "slot_map": {
+          "native": "v-agbada",
+          "shoes": "v-sand"
+        },
+        "template": "native_set",
+        "confidence": 0.639,
+        "explanation": {
+          "title": "An Owambe look",
+          "why": "The agbada and the sandals are a classic pairing. The formality suits owambe. It is built around your navy, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "native_set",
+          "item_ids": [
+            "v-agbada",
+            "v-sand"
+          ]
+        }
+      }
+    ],
+    "mode": "wardrobe",
+    "warnings": []
+  }
+}

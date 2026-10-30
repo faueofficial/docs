@@ -23,6 +23,38 @@ The default path. The user types an email address and receives a link.
    → 200 Session
 ```
 
+### Web app and mobile app: which one the link opens
+
+Both surfaces use the same endpoints and the same tokens. What stops them fighting
+over the link is **which host the link points at**:
+
+| Requested from | Send `surface` | The emailed link opens | What happens on a phone with the app |
+|---|---|---|---|
+| Mobile app | `app` (the default) | `https://faueofficial.com/auth/verify?t=` | The OS hands it to the app (universal link / app link) |
+| Web app | `web` | `https://app.faueofficial.com/auth/verify?t=` | Opens in the browser. The mobile app does not claim this host |
+
+Universal links and app links are per host, so putting the web app on its own host
+is what keeps them apart. A person who asked on the web is never yanked into the
+app, and a person who asked in the app is never left in a browser tab.
+
+The challenge still applies: the link only completes on the surface that asked.
+Open it somewhere else and the answer is `409` with a `device_code` (next
+section), which is also what happens when a person asks on their laptop and taps
+the link on their phone.
+
+If the app is **not** installed, an `app` link lands on a page on the site, which
+should offer "Continue in the browser" by sending them back to request a link
+from the web app. It must not try to consume the token itself.
+
+### Waitlist members
+
+A person who took the quiz on the website and joined the waitlist signs in with
+the same address and arrives **with their Style DNA and reserved username
+already in place** (`onboarding.quiz_completed` and `username_set` are true in
+the sign-in response). Do not show the quiz or the username screen for them;
+route on `onboarding`, as for anyone. Only a **verified** address matches. Someone
+who left the list is not matched.
+
 ### Why the link must not sign the user in on GET
 
 Mail security scanners — corporate gateways, some consumer providers, link-preview bots — fetch every URL in a message before the recipient sees it. If a `GET` consumed the token, the login would already be spent by the time the user tapped it, and the failure would look random.

@@ -16,8 +16,18 @@ eval-sets/
 ├─ spree_quality/    cases.jsonl  rubric.md  README.md
 ├─ fabric_match/     cases/  labels.jsonl  README.md
 ├─ look_rank/        cases.jsonl  rankings.jsonl  README.md
-└─ render_safety/    cases.jsonl  README.md
+├─ render_safety/    cases.jsonl  README.md
+├─ render_pilot/     cases.jsonl  (per-run human.json lives beside the run output)
+├─ look_constraints/ cases.jsonl  (20 now: looks that must be rejected, plus controls that must pass; gate 100 %)
+├─ cold_start/       cases.jsonl  (20 now: archetype picks on-occasion, in-weather, gender-allowed; gate 95 %)
+├─ adjust_instructions/ cases.jsonl  (30: words to a bounded change, contradictions and injection text refused; gate 100 %)
+├─ spree_safety/     cases.jsonl  (33: injection flagged, off-topic turned away, unsafe images refused, bad replies stopped; gate 100 %)
+├─ explain_grounding/ cases.jsonl  (16: a model's reason kept only if it names nothing the look lacks; gate 100 %)
+├─ look_rank/        cases.jsonl  (14 regression anchors until stylist rankings replace them; gate 90 %)
+└─ worn_extraction/  cases/  labels.jsonl  README.md   (planned; see ase-architecture.md 4.7.2)
 ```
+
+`ase/eval/runner.py` runs `look_constraints`, `cold_start`, `adjust_instructions`, `spree_safety`, `explain_grounding` and `look_rank` with no model or network (`../.venv/bin/python ase/eval/runner.py`), and `ase/tests/unit/test_eval_gate.py` runs them in CI.
 
 Images are stored by reference — a CDN URL plus a content hash — not committed. The repository holds labels, not pixels.
 

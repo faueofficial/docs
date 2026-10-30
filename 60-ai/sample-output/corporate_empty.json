@@ -1,0 +1,57 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [],
+    "occasion": "corporate",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "8b5eea3a-e5a6-4088-bd6a-d6c9ddcd73e0",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "a9729668-a791-4104-b358-d065bac3f94a",
+        "job_id": "8b5eea3a-e5a6-4088-bd6a-d6c9ddcd73e0",
+        "parent": null,
+        "mode": "archetype",
+        "pack_hash": "9b11e1344187e3435e1f",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [],
+        "slot_map": {},
+        "template": "archetype",
+        "confidence": 0.0,
+        "archetype": {
+          "name": "Sky blue linen shirt with charcoal trousers",
+          "occasions": [
+            "corporate"
+          ],
+          "weather": {
+            "min_c": 18.0,
+            "max_c": 33.0
+          },
+          "pieces": [
+            "sky blue shirt",
+            "charcoal trousers",
+            "black loafers"
+          ],
+          "why_this_works": "Cool blue over deep grey is calm and credible, and linen breathes through a long day."
+        },
+        "card_id": "sc_min_m_office_01",
+        "card_hash": "15c6c10724697b6c"
+      }
+    ],
+    "mode": "archetype",
+    "warnings": []
+  }
+}

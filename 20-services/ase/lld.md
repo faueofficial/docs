@@ -6,6 +6,8 @@ The styling intelligence. Named for Yoruba *àṣẹ* — the power to make thin
 
 `ase` holds no direct identifiers. It knows `user_id` and vectors; it does not know an email, a phone number, or a measurement.
 
+> **See also:** [`../../60-ai/ase-architecture.md`](../../60-ai/ase-architecture.md) — the tiered architecture, per-section low-level diagrams, cost model and evaluation gates (proposed; it asks for ADRs that would supersede 0017 and 0018 in part).
+
 ---
 
 ## 1. Module layout

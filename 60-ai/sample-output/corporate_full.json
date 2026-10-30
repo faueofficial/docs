@@ -1,0 +1,211 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [
+      {
+        "id": "v-agbada",
+        "category": "native",
+        "name": "navy agbada",
+        "colours": [
+          "navy"
+        ],
+        "fabric": "aso oke"
+      },
+      {
+        "id": "v-kaftan",
+        "category": "native",
+        "name": "cream kaftan",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-sokoto",
+        "category": "bottoms",
+        "name": "cream sokoto",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-fila",
+        "category": "accessories",
+        "name": "navy fila",
+        "colours": [
+          "navy"
+        ]
+      },
+      {
+        "id": "v-white",
+        "category": "tops",
+        "name": "white shirt",
+        "colours": [
+          "white"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-blk",
+        "category": "bottoms",
+        "name": "black trousers",
+        "colours": [
+          "black"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-loaf",
+        "category": "shoes",
+        "name": "brown loafers",
+        "colours": [
+          "brown"
+        ]
+      },
+      {
+        "id": "v-sand",
+        "category": "shoes",
+        "name": "gold sandals",
+        "colours": [
+          "gold"
+        ]
+      }
+    ],
+    "occasion": "corporate",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "da3162ba-e209-44f1-a8a1-93b3d8166f62",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "ea9ae5b3-c7df-48f9-b297-71dd19d5ec0e",
+        "job_id": "da3162ba-e209-44f1-a8a1-93b3d8166f62",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "db6d3e23995c98b21a6c",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-kaftan",
+          "v-sand"
+        ],
+        "slot_map": {
+          "native": "v-kaftan",
+          "shoes": "v-sand"
+        },
+        "template": "native_set",
+        "confidence": 0.944,
+        "explanation": {
+          "title": "A look for the office",
+          "why": "The kaftan and the sandals are a classic pairing. The formality suits corporate. It is built around your cream, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "native_set",
+          "item_ids": [
+            "v-kaftan",
+            "v-sand"
+          ]
+        }
+      },
+      {
+        "id": "66c8119c-0f10-49d7-bbb2-a5b3a4888ced",
+        "job_id": "da3162ba-e209-44f1-a8a1-93b3d8166f62",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "db6d3e23995c98b21a6c",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-white",
+          "v-blk",
+          "v-loaf"
+        ],
+        "slot_map": {
+          "top": "v-white",
+          "bottom": "v-blk",
+          "shoes": "v-loaf"
+        },
+        "template": "two_piece",
+        "confidence": 0.407,
+        "explanation": {
+          "title": "A look for the office",
+          "why": "The shirt and the trousers are a classic pairing. The formality suits corporate. It is built around your white, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "two_piece",
+          "item_ids": [
+            "v-white",
+            "v-blk",
+            "v-loaf"
+          ]
+        }
+      },
+      {
+        "id": "495c5aca-9513-4409-941c-e40b444e236d",
+        "job_id": "da3162ba-e209-44f1-a8a1-93b3d8166f62",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "db6d3e23995c98b21a6c",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-kaftan",
+          "v-loaf",
+          "v-fila"
+        ],
+        "slot_map": {
+          "native": "v-kaftan",
+          "shoes": "v-loaf",
+          "accessory": "v-fila"
+        },
+        "template": "native_set",
+        "confidence": 1.0,
+        "explanation": {
+          "title": "A look for the office",
+          "why": "The formality suits corporate. It is built around your cream, with the other colours kept calm beside it. Chosen with today's 29 degrees in mind.",
+          "used": [
+            "neutral_anchor",
+            "occasion",
+            "occasion_label",
+            "temp_c"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "native_set",
+          "item_ids": [
+            "v-kaftan",
+            "v-loaf",
+            "v-fila"
+          ]
+        }
+      }
+    ],
+    "mode": "wardrobe",
+    "warnings": []
+  }
+}

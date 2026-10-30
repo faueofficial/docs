@@ -1,0 +1,208 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [
+      {
+        "id": "v-agbada",
+        "category": "native",
+        "name": "navy agbada",
+        "colours": [
+          "navy"
+        ],
+        "fabric": "aso oke"
+      },
+      {
+        "id": "v-kaftan",
+        "category": "native",
+        "name": "cream kaftan",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-sokoto",
+        "category": "bottoms",
+        "name": "cream sokoto",
+        "colours": [
+          "cream"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-fila",
+        "category": "accessories",
+        "name": "navy fila",
+        "colours": [
+          "navy"
+        ]
+      },
+      {
+        "id": "v-white",
+        "category": "tops",
+        "name": "white shirt",
+        "colours": [
+          "white"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-blk",
+        "category": "bottoms",
+        "name": "black trousers",
+        "colours": [
+          "black"
+        ],
+        "fabric": "cotton"
+      },
+      {
+        "id": "v-loaf",
+        "category": "shoes",
+        "name": "brown loafers",
+        "colours": [
+          "brown"
+        ]
+      },
+      {
+        "id": "v-sand",
+        "category": "shoes",
+        "name": "gold sandals",
+        "colours": [
+          "gold"
+        ]
+      }
+    ],
+    "occasion": "wedding",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "b24ba1f3-8939-45ea-9f4b-3cbf73f52627",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "acd5601b-fef0-4322-ad42-12897cad3138",
+        "job_id": "b24ba1f3-8939-45ea-9f4b-3cbf73f52627",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "12ff84ba073cd0baa079",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-kaftan",
+          "v-sand"
+        ],
+        "slot_map": {
+          "native": "v-kaftan",
+          "shoes": "v-sand"
+        },
+        "template": "native_set",
+        "confidence": 0.306,
+        "explanation": {
+          "title": "A wedding look",
+          "why": "The kaftan and the sandals are a classic pairing. The formality suits wedding. It is built around your cream, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "native_set",
+          "item_ids": [
+            "v-kaftan",
+            "v-sand"
+          ]
+        }
+      },
+      {
+        "id": "284c7ca4-4c64-4b32-8a74-a747e6413a6b",
+        "job_id": "b24ba1f3-8939-45ea-9f4b-3cbf73f52627",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "12ff84ba073cd0baa079",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-white",
+          "v-blk",
+          "v-loaf"
+        ],
+        "slot_map": {
+          "top": "v-white",
+          "bottom": "v-blk",
+          "shoes": "v-loaf"
+        },
+        "template": "two_piece",
+        "confidence": 0.139,
+        "explanation": {
+          "title": "A wedding look",
+          "why": "The shirt and the trousers are a classic pairing. The formality suits wedding. It is built around your white, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "two_piece",
+          "item_ids": [
+            "v-white",
+            "v-blk",
+            "v-loaf"
+          ]
+        }
+      },
+      {
+        "id": "92133410-2f5f-4c2c-bb79-99c09400fe72",
+        "job_id": "b24ba1f3-8939-45ea-9f4b-3cbf73f52627",
+        "parent": null,
+        "mode": "wardrobe",
+        "pack_hash": "12ff84ba073cd0baa079",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [
+          "v-agbada",
+          "v-sand"
+        ],
+        "slot_map": {
+          "native": "v-agbada",
+          "shoes": "v-sand"
+        },
+        "template": "native_set",
+        "confidence": 0.639,
+        "explanation": {
+          "title": "A wedding look",
+          "why": "The agbada and the sandals are a classic pairing. The formality suits wedding. It is built around your navy, with the other colours kept calm beside it.",
+          "used": [
+            "garment_pairs",
+            "neutral_anchor",
+            "occasion",
+            "occasion_label"
+          ]
+        },
+        "render": {
+          "strategy": "composite",
+          "template": "native_set",
+          "item_ids": [
+            "v-agbada",
+            "v-sand"
+          ]
+        }
+      }
+    ],
+    "mode": "wardrobe",
+    "warnings": []
+  }
+}

@@ -71,15 +71,21 @@ upload (to the gateway with a short-lived signed credential)
 The three models sit behind one `Detector` protocol, so which model is
 configuration rather than an assumption baked into the pipeline:
 
-| Stage | Implementation | Resident |
+| Stage | Implementation | Size |
 |---|---|---|
-| Safety | `open_clip` zero-shot | ~350 MB |
-| Faces | MediaPipe BlazeFace | ~30 MB |
-| OCR | Tesseract | ~50 MB |
+| Faces | YuNet (ONNX) on onnxruntime | 0.23 MB model |
+| OCR | PP-OCRv4 text **detection** (ONNX), not recognition | 4.7 MB model |
+| Safety | **Not implemented yet.** Recorded as `unchecked`; see the detector doc | n/a |
 
-They live in `faue-core/requirements/media.in`, a **worker-only** role. The
-gateway's web image never decodes an image — it signs uploads and reads asset
-rows — which is what keeps half a gigabyte of models out of every API instance.
+`onnxruntime` itself is a 24 MB wheel, so about 29 MB in total. This replaced the
+earlier plan (`open_clip` ~350 MB, MediaPipe ~30 MB, Tesseract ~50 MB) because
+the detector ships in the API image and every upload pays for it. Measurements,
+knobs and what is not covered: [`media-detector.md`](../20-services/api-gateway/media-detector.md).
+
+The detector runs in the gateway process: uploads are processed in the request
+today, so the API image installs the `media` extra. If processing moves to a
+worker role later, the extra moves with it; the small size is what makes either
+placement cheap.
 
 **Redaction is a fill, not a blur.** A blur is reversible enough to matter, and
 "unrecognisable to me, squinting" is not the standard. Boxes are also grown

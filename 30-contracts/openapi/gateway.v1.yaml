@@ -65,6 +65,12 @@ tags:
     description: Style DNA cards as images, and the public page behind a shared card
   - name: unsubscribe
     description: Stopping email, without signing in
+  - name: shares
+    description: Share a look from TikTok, Instagram or Pinterest, as a link or an image
+  - name: studio
+    description: Events, tailors and what you have told ASE
+  - name: context
+    description: Rough location and the weather there
 
 security:
   - bearerAuth: []
@@ -254,7 +260,21 @@ paths:
         `session_challenge` is an opaque value the client generates and retains. If
         the link is opened on a different device, the landing page falls back to a
         6-digit code the user types into this session.
+
+        **Mobile app.** Send `X-Platform: mobile` (or `Platform: mobile`) and the email carries a
+        **six-digit code** to type into the app instead of a link to open. The response says which
+        in `method`. Finish with `POST /auth/link/consume` and `{email, code}`. Any other value, or no
+        header, gets the link exactly as before.
       security: []
+      parameters:
+        - name: X-Platform
+          in: header
+          required: false
+          schema: { type: string, enum: [mobile], example: mobile }
+          description: >
+            Say the request comes from the mobile app, so a six-digit code is emailed instead of a
+            link. `Platform` is accepted as an alias, and the value may be written as JSON
+            (`{"platform": "mobile"}`). Browsers need the header allowed in CORS, which it is.
       requestBody:
         required: true
         content:
@@ -269,6 +289,15 @@ paths:
                   minLength: 16
                   maxLength: 128
                   description: Client-generated opaque value binding the request to this device.
+                surface:
+                  type: string
+                  enum: [app, web]
+                  default: app
+                  description: |
+                    Where the person is signing in, which decides where the emailed link opens. `app`
+                    (the default) opens on the site's own address, which the mobile app claims. `web`
+                    opens on the web app's address, which always stays in the browser. Send what is true;
+                    a link has to open on the surface that holds the session challenge.
       responses:
         '202':
           description: >
@@ -280,7 +309,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [delivery, masked_destination, expires_in, resend_available_in]
+                required: [delivery, masked_destination, expires_in, resend_available_in, method]
                 properties:
                   delivery:
                     type: string
@@ -298,6 +327,14 @@ paths:
                       Seconds until another request is accepted. Drive the resend
                       cooldown from this rather than a hardcoded value — the two
                       disagree the moment the server rule changes.
+                  method:
+                    type: string
+                    enum: [link, code]
+                    default: link
+                    description: >
+                      What was emailed: a `link` to open, or a six-digit `code` to type. Decided by the
+                      platform header, never by the address, so it reveals nothing about the account.
+                      `expires_in` is the lifetime of whichever was sent.
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /auth/link/consume:
@@ -320,12 +357,25 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [token]
-              properties:
-                token: { type: string }
-                session_challenge: { type: string }
-                device_code: { type: string, description: 'Supplied when completing a cross-device sign-in' }
+              oneOf:
+                - title: By link
+                  type: object
+                  required: [token]
+                  properties:
+                    token: { type: string }
+                    session_challenge: { type: string }
+                    device_code: { type: string, description: 'Supplied when completing a cross-device sign-in' }
+                - title: By emailed code (mobile app)
+                  type: object
+                  required: [email, code]
+                  description: >
+                    The six digits emailed after `POST /auth/link/request` with `X-Platform: mobile`, with
+                    the address they were sent to. Signs the person in, or signs them up if the address is
+                    new, and is the same account the link would reach. A code works once, expires after
+                    `expires_in` seconds, and is burned after 5 wrong tries (ask for a new one).
+                  properties:
+                    email: { type: string, format: email }
+                    code: { type: string, pattern: '^\d{6}$', example: '482916' }
       responses:
         '200':
           description: Signed in
@@ -343,6 +393,11 @@ paths:
                   device_code_required: { type: boolean, const: true }
                   device_code: { type: string, description: '6-digit code to enter in the original session' }
         '410': { description: 'Token already used or expired', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '401':
+          description: >
+            `login_code_invalid`: the code is wrong (the detail says how many tries are left), or none
+            was requested for this address. The person can try again.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /auth/oauth/google:
@@ -695,7 +750,7 @@ paths:
               type: object
               required: [kind, content_type]
               properties:
-                kind: { type: string, enum: [fabric, vault_item, fit, avatar] }
+                kind: { type: string, enum: [vault, fabric, avatar, share], description: '`share` is a screenshot sent with a share to FAUE.' }
                 content_type: { type: string, enum: ['image/jpeg', 'image/png', 'image/heic', 'image/webp'] }
                 byte_size: { type: integer, maximum: 20971520, description: 'Maximum 20 MB' }
       responses:
@@ -855,6 +910,18 @@ paths:
         '202': { description: 'Job accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
         '403': { $ref: '#/components/responses/ConsentRequired' }
 
+  /vault/items/{item_id}/restore:
+    post:
+      tags: [vault]
+      summary: Restore a deleted item
+      description: '`MVP` Deleting an item only hides it. It can be restored for 30 days; after that the images are removed from every store and this is `409`. Wear history keeps the item''s name and category either way.'
+      parameters:
+        - { name: item_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Restored }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Past the retention period, or its image is gone }
+
   /vault/wear:
     post:
       tags: [vault]
@@ -878,218 +945,6 @@ paths:
         '201': { description: 'Logged' }
 
   # ──────────────────────────────── looks ────────────────────────────────
-
-  /looks/generate:
-    post:
-      tags: [looks]
-      summary: Generate looks
-      description: |
-        `MVP` `Consent: ai_processing`
-
-        Asynchronous. Returns a job envelope immediately; follow progress over SSE at
-        `stream_url` or by polling `poll_url`.
-
-        Typical completion is 20–45 seconds. Progress states are `queued`,
-        `analyzing`, `assembling`, `rendering`, `done`, `failed`.
-
-        `use_weather` requires `location_weather` consent; without it the request
-        still succeeds and weather is simply not used.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [source]
-              properties:
-                source: { type: string, enum: [vault, fabric, prompt] }
-                item_ids: { type: array, items: { type: string, format: uuid }, description: 'Required when source is vault' }
-                fabric_asset_id: { type: string, format: uuid, description: 'Required when source is fabric' }
-                occasion: { $ref: '#/components/schemas/Occasion' }
-                mood: { type: string, maxLength: 60 }
-                note: { type: string, maxLength: 280, description: 'The app''s "Add a note (optional)…" field' }
-                use_weather: { type: boolean, default: false }
-                count: { type: integer, minimum: 1, maximum: 5, default: 3 }
-      responses:
-        '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
-        '403': { $ref: '#/components/responses/ConsentRequired' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-
-  /looks/jobs/{job_id}:
-    get:
-      tags: [looks]
-      summary: Poll job progress
-      description: '`MVP` Polling fallback for clients that cannot hold an SSE connection. Poll every 2 seconds.'
-      parameters: [{ $ref: '#/components/parameters/JobId' }]
-      responses:
-        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/JobStatus' } } } }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /looks/jobs/{job_id}/stream:
-    get:
-      tags: [looks]
-      summary: Stream job progress (SSE)
-      description: |
-        `MVP` Server-sent events. Event names: `progress`, `done`, `failed`.
-        The connection closes after a terminal event. On disconnect, reconnect or
-        fall back to polling — progress is server-side state, so nothing is lost.
-      parameters: [{ $ref: '#/components/parameters/JobId' }]
-      responses:
-        '200':
-          description: Event stream
-          content:
-            text/event-stream:
-              schema: { type: string }
-
-  /looks:
-    get:
-      tags: [looks]
-      summary: List looks
-      description: '`MVP` Recent and saved looks, matching the dashboard sections.'
-      parameters:
-        - { name: filter, in: query, schema: { type: string, enum: [recent, saved, all], default: all } }
-        - { name: occasion, in: query, schema: { $ref: '#/components/schemas/Occasion' } }
-        - { $ref: '#/components/parameters/Cursor' }
-        - { $ref: '#/components/parameters/Limit' }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Page'
-                  - type: object
-                    required: [items]
-                    properties:
-                      items: { type: array, items: { $ref: '#/components/schemas/LookSummary' } }
-
-  /looks/{look_id}:
-    get:
-      tags: [looks]
-      summary: Get a look
-      description: '`MVP` Full detail including items, reasoning, and the "Why this works for you" explanation.'
-      parameters: [{ $ref: '#/components/parameters/LookId' }]
-      responses:
-        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/Look' } } } }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /looks/{look_id}/save:
-    post:
-      tags: [looks]
-      summary: Save a look
-      description: '`MVP` Idempotent.'
-      parameters: [{ $ref: '#/components/parameters/LookId' }]
-      responses:
-        '200': { description: 'Saved', content: { application/json: { schema: { $ref: '#/components/schemas/Look' } } } }
-    delete:
-      tags: [looks]
-      summary: Unsave a look
-      description: '`MVP`'
-      parameters: [{ $ref: '#/components/parameters/LookId' }]
-      responses:
-        '204': { description: 'Unsaved' }
-
-  /looks/{look_id}/regenerate:
-    post:
-      tags: [looks]
-      summary: Regenerate
-      description: '`MVP` `Consent: ai_processing` Same inputs, excluding the previous result. Returns a new job.'
-      parameters: [{ $ref: '#/components/parameters/LookId' }]
-      responses:
-        '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
-
-  /looks/{look_id}/adjust:
-    post:
-      tags: [looks]
-      summary: Adjust a look
-      description: '`MVP` `Consent: ai_processing` The "Adjust" action. Swap an item or change the occasion; returns a new job.'
-      parameters: [{ $ref: '#/components/parameters/LookId' }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                swap_item_id: { type: string, format: uuid }
-                occasion: { $ref: '#/components/schemas/Occasion' }
-                note: { type: string, maxLength: 280 }
-      responses:
-        '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
-
-  /looks/{look_id}/share:
-    post:
-      tags: [looks]
-      summary: Create a share image and link
-      description: '`MVP` Produces a branded share image and a public `faueofficial.com/look/{id}` URL.'
-      parameters: [{ $ref: '#/components/parameters/LookId' }]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                surface: { type: string, enum: [whatsapp, instagram, x, link, other] }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [share_url, image_url]
-                properties:
-                  share_url: { type: string, format: uri }
-                  image_url: { type: string, format: uri }
-
-  /looks/{look_id}/feedback:
-    post:
-      tags: [looks]
-      summary: Give feedback
-      description: '`MVP` Feeds the behaviour vector and future ranking. Idempotent per look.'
-      parameters: [{ $ref: '#/components/parameters/LookId' }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [signal]
-              properties:
-                signal: { type: string, enum: [more_like_this, not_my_style] }
-                reason: { type: string, maxLength: 200 }
-      responses:
-        '204': { description: 'Recorded' }
-
-  # ─────────────────────────────── fabric ───────────────────────────────
-
-  /fabric/{asset_id}/style:
-    post:
-      tags: [fabric]
-      summary: Get style suggestions for a fabric
-      description: |
-        `MVP` `Consent: ai_processing`
-
-        Classifies the fabric and returns 3–5 native styles suited to it, each with
-        reasoning specific to this fabric and accessory pairings.
-
-        Style selection here is rules-first — a wrong match costs the user money at a
-        tailor. The model classifies and explains; it does not choose.
-      parameters: [{ $ref: '#/components/parameters/AssetId' }]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                fabric_type: { $ref: '#/components/schemas/FabricType', description: 'Overrides detection when the user corrects it' }
-                occasion: { $ref: '#/components/schemas/Occasion' }
-                gender_presentation: { $ref: '#/components/schemas/GenderPresentation' }
-                constraints: { type: array, items: { type: string }, example: [modest, stand_out] }
-      responses:
-        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/FabricAnalysis' } } } }
-        '403': { $ref: '#/components/responses/ConsentRequired' }
 
   /fabric/{asset_id}/tailor-share:
     post:
@@ -1122,81 +977,6 @@ paths:
 
   # ──────────────────────────────── spree ────────────────────────────────
 
-  /spree/sessions:
-    post:
-      tags: [spree]
-      summary: Start a styling conversation
-      description: '`MVP` `Consent: ai_processing`'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [session_id]
-                properties:
-                  session_id: { type: string, format: uuid }
-        '403': { $ref: '#/components/responses/ConsentRequired' }
-
-  /spree/sessions/{session_id}/messages:
-    post:
-      tags: [spree]
-      summary: Send a message
-      description: |
-        `MVP` `Consent: ai_processing`
-
-        Streams the reply as SSE. Images must be `ready` assets.
-
-        Off-topic or unsafe input returns a templated refusal without a model call —
-        that is expected behaviour, not an error.
-      parameters: [{ $ref: '#/components/parameters/SessionId' }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                text: { type: string, maxLength: 1000 }
-                asset_ids: { type: array, items: { type: string, format: uuid }, maxItems: 3 }
-      responses:
-        '200': { description: 'SSE stream of the reply', content: { text/event-stream: { schema: { type: string } } } }
-        '429': { $ref: '#/components/responses/RateLimited' }
-
-  /spree/sessions/{session_id}:
-    get:
-      tags: [spree]
-      summary: Get conversation history
-      description: '`MVP` Retention is TTL-bounded; older messages may be absent.'
-      parameters: [{ $ref: '#/components/parameters/SessionId' }]
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [session_id, messages]
-                properties:
-                  session_id: { type: string, format: uuid }
-                  messages: { type: array, items: { $ref: '#/components/schemas/SpreeMessage' } }
-
-  # ──────────────────────────────── agent ────────────────────────────────
-
-  /agent/today:
-    get:
-      tags: [agent]
-      summary: Today's suggestion
-      description: |
-        `MVP` `Consent: personalization`
-
-        The dashboard's "What are you wearing today?" content. Returns the current
-        suggestion, generating one on demand if none exists for today.
-      responses:
-        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/AgentSuggestion' } } } }
-        '403': { $ref: '#/components/responses/ConsentRequired' }
-
   /agent/settings:
     get:
       tags: [agent]
@@ -1216,31 +996,11 @@ paths:
       responses:
         '200': { description: 'Updated', content: { application/json: { schema: { $ref: '#/components/schemas/AgentSettings' } } } }
 
-  /agent/suggestions/{run_id}/respond:
-    post:
-      tags: [agent]
-      summary: Respond to a suggestion
-      description: '`MVP` Accept, dismiss, or request another. Feeds agent memory.'
-      parameters: [{ name: run_id, in: path, required: true, schema: { type: string, format: uuid } }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [outcome]
-              properties:
-                outcome: { type: string, enum: [accepted, dismissed, regenerate] }
-      responses:
-        '204': { description: 'Recorded' }
-
-  # ───────────────────────────── integrations ─────────────────────────────
-
   /integrations:
     get:
       tags: [integrations]
       summary: List connected accounts
-      description: '`MVP` Backs the Connected Accounts screen. Instagram is not offered — the platform API cannot deliver what it would promise.'
+      description: '`MVP` Backs the Connected Accounts screen. `status` is `needs_reauth` when Pinterest rejected the stored token (show Connect again) and `syncing` while an import runs (poll this until it changes). Instagram is not offered — the platform API cannot deliver what it would promise.'
       responses:
         '200':
           description: OK
@@ -1254,7 +1014,7 @@ paths:
     get:
       tags: [integrations]
       summary: Begin Pinterest connection
-      description: '`MVP` `Consent: pinterest_sync` Returns an OAuth2 + PKCE authorization URL. Read-only scopes only.'
+      description: '`MVP` `Consent: pinterest_sync` Returns the Pinterest authorization URL (authorization code flow; read-only scopes `boards:read` and `pins:read`). Open it in the browser. After the person decides, Pinterest calls the callback, which redirects the browser into the app with `?pinterest=connected`, `denied` or `error`. `state` is single use and valid for 10 minutes. `503` when the app has no Pinterest credentials.'
       responses:
         '200':
           description: OK
@@ -1267,24 +1027,26 @@ paths:
                   authorize_url: { type: string, format: uri }
                   state: { type: string }
         '403': { $ref: '#/components/responses/ConsentRequired' }
+        '503': { description: 'Pinterest is not configured or not answering' }
 
   /integrations/pinterest/callback:
     get:
       tags: [integrations]
       summary: OAuth callback
-      description: '`MVP` Called by Pinterest. Exchanges the code, stores encrypted tokens, and redirects back into the app.'
+      description: '`MVP` Called by Pinterest, not by the client. Checks and consumes `state`, exchanges the code, stores the tokens encrypted, and redirects into the app. It never returns an error body: the outcome is the `pinterest` query parameter on the redirect (`connected`, `denied` when the person declined, `error` for anything else).'
       security: []
       parameters:
-        - { name: code, in: query, required: true, schema: { type: string } }
-        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
       responses:
-        '302': { description: 'Redirect into the app' }
+        '302': { description: 'Redirect into the app with ?pinterest=connected, denied or error' }
 
   /integrations/pinterest/boards:
     get:
       tags: [integrations]
       summary: List boards
-      description: '`MVP` The user chooses which boards to import. Never import everything by default.'
+      description: '`MVP` `Consent: pinterest_sync` The signed-in person''s own boards, for them to choose from. Never import everything by default. `imported` is true for a board imported before. `404` when Pinterest is not connected, `409` when it needs reconnecting, `403` when Pinterest refuses the content (not retryable), `503` when Pinterest is not answering.'
       responses:
         '200':
           description: OK
@@ -1293,12 +1055,15 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/PinterestBoard' }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Needs reconnecting, or an import is already running' }
 
   /integrations/pinterest/import:
     post:
       tags: [integrations]
       summary: Import selected boards
-      description: '`MVP` Asynchronous. Pins are cached through the PII pipeline and embedded into the aspiration vector.'
+      description: '`MVP` `Consent: pinterest_sync` Asynchronous. Imports up to 200 pins from each chosen board, at most 10 boards per request. Every id must be a board of the connected account, otherwise `422`. `409` while another import is running. Poll `GET /integrations` until `status` is no longer `syncing`. Pin images are not copied until they can pass the PII pipeline; until then a pin keeps its Pinterest image address.'
       requestBody:
         required: true
         content:
@@ -1307,18 +1072,23 @@ paths:
               type: object
               required: [board_ids]
               properties:
-                board_ids: { type: array, items: { type: string }, minItems: 1 }
+                board_ids: { type: array, items: { type: string }, minItems: 1, maxItems: 50 }
       responses:
         '202': { description: 'Import started', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+        '403': { $ref: '#/components/responses/ConsentRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Needs reconnecting, or an import is already running' }
+        '422': { description: 'Empty choice, too many boards, or a board that is not in the account' }
 
   /integrations/{provider}:
     delete:
       tags: [integrations]
       summary: Disconnect
-      description: '`MVP` Revokes the upstream token, deletes cached pins, and removes the aspiration vector.'
+      description: '`MVP` Deletes the stored token and every imported pin. Never gated by consent, and safe to repeat. Pinterest documents no token-revocation call, so access ends by deleting ours; the person can also remove FAUE in Pinterest''s own settings. Withdrawing `pinterest_sync` does the same.'
       parameters: [{ name: provider, in: path, required: true, schema: { type: string, enum: [pinterest] } }]
       responses:
         '204': { description: 'Disconnected' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ───────────────────────────── notifications ─────────────────────────────
 
@@ -1326,7 +1096,7 @@ paths:
     get:
       tags: [notifications]
       summary: Notification inbox
-      description: '`MVP` Backs the Notification screen. `category` maps to its All / Style / Activity tabs.'
+      description: '`MVP` Backs the Notification screen, newest first, with the unread count for the badge. `category` maps to its All / Style / Activity tabs.'
       parameters:
         - { name: category, in: query, schema: { type: string, enum: [style, activity] } }
         - { $ref: '#/components/parameters/Cursor' }
@@ -1358,7 +1128,7 @@ paths:
     get:
       tags: [notifications]
       summary: Get preferences
-      description: '`MVP` Per category and channel, plus quiet hours.'
+      description: '`MVP` Every category on every channel (15 entries), with the default where the person never chose. Marketing is off until turned on.'
       responses:
         '200':
           description: OK
@@ -1370,7 +1140,7 @@ paths:
     put:
       tags: [notifications]
       summary: Update preferences
-      description: '`MVP`'
+      description: '`MVP` The body is the **complete** set: anything omitted reverts to its default, so read first and send back modified. A channel turned off is skipped at delivery. Quiet hours need both ends or neither. Returns the resulting set.'
       requestBody:
         required: true
         content:
@@ -1379,13 +1149,20 @@ paths:
               type: array
               items: { $ref: '#/components/schemas/NotificationPreference' }
       responses:
-        '200': { description: 'Updated' }
+        '200':
+          description: The resulting preferences
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/NotificationPreference' }
+        '422': { description: Unknown category or channel, a duplicate, or bad quiet hours }
 
   /notifications/devices:
     post:
       tags: [notifications]
       summary: Register a device token
-      description: '`MVP` Tokens are deleted on logout and on account deletion.'
+      description: '`MVP` Safe to call on every launch: the same token updates its registration instead of duplicating. At most 10 devices are kept per person. Tokens are stored encrypted and deleted with the account.'
       requestBody:
         required: true
         content:
@@ -1397,7 +1174,26 @@ paths:
                 platform: { type: string, enum: [ios, android, web] }
                 token: { type: string }
       responses:
-        '201': { description: 'Registered' }
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_id, created]
+                properties:
+                  device_id: { type: string, format: uuid }
+                  created: { type: boolean, description: False when the token was already registered. }
+
+  /notifications/devices/{device_id}:
+    delete:
+      tags: [notifications]
+      summary: Remove a device
+      description: '`MVP` Stop push to one device, for example on sign-out.'
+      parameters: [{ name: device_id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ─────────────────────────────── privacy ───────────────────────────────
 
@@ -1405,17 +1201,43 @@ paths:
     post:
       tags: [privacy]
       summary: Request a data export
-      description: '`MVP` Asynchronous. Produces a downloadable archive of everything held about the user.'
+      description: |
+        `MVP` Assembles everything held about the person (profile, body profile, consents, Style DNA,
+        quiz answers, uploads, vault, wear log, saved looks, connected accounts and imported pins,
+        notifications and waitlist entry). Sign-in secrets and stored provider tokens are not included.
+
+        Returns **202** with a job; fetch `poll_url` for the archive. It is kept for seven days and
+        stored encrypted.
       responses:
         '202': { description: 'Accepted', content: { application/json: { schema: { $ref: '#/components/schemas/JobEnvelope' } } } }
+
+  /privacy/export/{export_id}:
+    get:
+      tags: [privacy]
+      summary: Download a data export
+      description: '`MVP` The archive as a JSON attachment. `404` once it has expired, and for anyone but the person it describes.'
+      parameters:
+        - { name: export_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: 'The archive', content: { application/json: { schema: { type: object } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /privacy/delete:
     post:
       tags: [privacy]
       summary: Delete the account
       description: |
-        `MVP` Irreversible. Fans out deletion across every module and third party, with
-        a 30-day completion SLA.
+        `MVP` Schedules the account for deletion. **Sessions end at once, on every device.**
+
+        The data is **kept for a waiting period** (`purge_after`, 14 days by default) so a deletion
+        made by mistake can be undone with `DELETE /privacy/delete`. Signing in during that time
+        reaches only `GET` and `DELETE /privacy/delete` and `POST /auth/logout`; every other route
+        returns `403 account_pending_deletion`. When the period ends everything the gateway holds
+        (profile, style, uploads and their stored images, vault, imported pins, the Pinterest token,
+        notifications, and the waitlist entry for the same address) is removed, and the deletion
+        ledger tracks the other modules (`ase`) to the 30-day legal deadline.
+
+        Asking again while a request is open returns the same one.
 
         Required by the App Store for any app offering Sign in with Apple, so this is
         launch-blocking rather than optional.
@@ -1431,7 +1253,7 @@ paths:
                 reason: { type: string, maxLength: 500 }
       responses:
         '202':
-          description: Deletion started
+          description: Deletion scheduled. Sign the person out and clear local data.
           content:
             application/json:
               schema:
@@ -1440,14 +1262,235 @@ paths:
                 properties:
                   ledger_id: { type: string, format: uuid }
                   sla_due_at: { type: string, format: date-time }
+                  purge_after: { type: [string, 'null'], format: date-time, description: 'When the data is removed. Until then the request can be cancelled.' }
+        '422': { description: '`confirm` missing or not true.' }
+    get:
+      tags: [privacy]
+      summary: Is a deletion waiting?
+      description: '`MVP` Reachable while the account is scheduled for deletion. Show the date and the cancel action.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: { type: string, enum: [none, scheduled] }
+                  ledger_id: { type: string, format: uuid }
+                  requested_at: { type: string, format: date-time }
+                  purge_after: { type: string, format: date-time }
+                  sla_due_at: { type: string, format: date-time }
+    delete:
+      tags: [privacy]
+      summary: Cancel a scheduled deletion
+      description: |
+        `MVP` Only possible before `purge_after`; afterwards `409` and the data is gone. Returns a
+        fresh session, because the token used here is limited to the deletion routes: **replace the
+        stored tokens with the ones returned.**
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, access_token, refresh_token, expires_in]
+                properties:
+                  status: { type: string, enum: [cancelled] }
+                  access_token: { type: string }
+                  refresh_token: { type: string }
+                  expires_in: { type: integer }
+        '409': { description: 'Nothing waiting, or the data has already been removed.' }
 
   /privacy/restrict:
     post:
       tags: [privacy]
       summary: Restrict processing
-      description: '`MVP` Pauses all optional processing while retaining the account.'
+      description: |
+        `MVP` Pauses all optional processing while keeping the account and its data. While it is in
+        force every purpose except `essential` is refused with `403 forbidden` ("processing is
+        restricted"), whatever consent was given. Nothing is deleted.
       responses:
         '204': { description: 'Restricted' }
+    delete:
+      tags: [privacy]
+      summary: Lift the restriction
+      description: '`MVP` Optional processing works again under the consents the person already gave.'
+      responses:
+        '204': { description: 'Lifted' }
+
+  # ──────────────────────────────── shares ────────────────────────────────
+
+  /shares:
+    post:
+      tags: [shares]
+      summary: Share a look
+      description: |
+        `MVP` By link, by image, or both. Links to a single **TikTok**, **Instagram** or
+        **Pinterest** post are accepted, with or without tracking parameters; short links
+        (`vm.tiktok.com`, `pin.it`) are followed. Any other address is `422` with advice to
+        share a screenshot.
+
+        When the link gives no picture the item is kept with `status: needs_image` and a
+        `reason` (`no_preview`, or `unavailable` when the post could not be read). Ask for a
+        screenshot, upload it with `kind: share`, and send it to `PUT /shares/{id}/image`.
+        Instagram links usually need this: Instagram no longer publishes a cover image.
+
+        Sharing the same post again returns the existing item with `200`. `title` and
+        `author_name` are written by strangers: show them as plain text.
+
+        Limited to 30 per hour and 100 per day.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, maxLength: 2048 }
+                asset_id: { type: string, format: uuid, description: 'An upload with `status: ready`.' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/SharedItem' } } } }
+        '200': { description: Already shared, content: { application/json: { schema: { $ref: '#/components/schemas/SharedItem' } } } }
+        '404': { description: The image is not yours }
+        '409': { description: The image has not finished processing }
+        '422': { description: Nothing to share, or not a link to a single post }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    get:
+      tags: [shares]
+      summary: Shared looks
+      description: '`MVP` Newest first.'
+      parameters:
+        - { name: before, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_before]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/SharedItem' } }
+                  next_before: { type: [string, 'null'], format: date-time }
+
+  /shares/{share_id}:
+    parameters:
+      - { name: share_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [shares]
+      summary: One shared look
+      description: '`MVP`'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SharedItem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [shares]
+      summary: Remove a shared look
+      description: '`MVP`'
+      responses:
+        '204': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /shares/{share_id}/image:
+    put:
+      tags: [shares]
+      summary: Attach a screenshot
+      description: '`MVP` For a share with `status: needs_image`. The image must be yours and `ready`.'
+      parameters:
+        - { name: share_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id]
+              properties:
+                asset_id: { type: string, format: uuid }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SharedItem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: The image has not finished processing }
+
+  /share-events:
+    post:
+      tags: [shares]
+      summary: Record that a card was shared
+      description: |
+        `MVP` **No sign-in needed.** Call it when someone sends a Style DNA card to Stories or as
+        a post, copies the link, or uses the share sheet. Only the kind, the surface, the card's
+        dominant persona id and the time are kept: no account, address or IP address. It feeds
+        the "shared from FAUE" count in the console. Limited to 120 per hour per IP address.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [story, post, link, native] }
+                surface: { type: string, enum: [web, app], default: web }
+                persona: { type: string, minLength: 2, maxLength: 2, example: CM }
+      responses:
+        '204': { description: Recorded }
+        '422': { description: Unknown kind }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /me/phone:
+    get:
+      tags: [profile]
+      summary: The saved phone number
+      description: '`MVP` Masked, with whether it is verified.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { phone: { type: [string, 'null'], example: '+234******678' }, verified: { type: boolean } } } } } }
+    put:
+      tags: [profile]
+      summary: Save a number and send it a code
+      description: |
+        `MVP` Sends a six digit code by SMS, or by WhatsApp with `via`. A Nigerian number may be given
+        as `0803...`. Until the code is entered the number is unverified and nothing else is sent to
+        it. Limited to 3 an hour and 5 a day. `503` when the channel is not available.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string, minLength: 7, maxLength: 24 }
+                via: { type: string, enum: [sms, whatsapp], default: sms }
+      responses:
+        '202': { description: Code sent }
+        '422': { description: Not a valid number }
+        '503': { description: SMS or WhatsApp is not available }
+    delete:
+      tags: [profile]
+      summary: Forget the number
+      description: '`MVP` SMS and WhatsApp stop at once.'
+      responses:
+        '204': { description: Removed }
+
+  /me/phone/verify:
+    post:
+      tags: [profile]
+      summary: Enter the code
+      description: '`MVP` Ten minutes and five tries, then ask for a new code (`409`).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [code], properties: { code: { type: string, minLength: 4, maxLength: 8 } } }
+      responses:
+        '200': { description: Verified }
+        '409': { description: Expired, or too many attempts }
+        '422': { description: Wrong code }
 
   # ──────────────────────────────── cards and sharing ────────────────────────────────
 
@@ -1528,6 +1571,1630 @@ paths:
         '200': { description: 'Done', content: { application/json: { schema: { $ref: '#/components/schemas/UnsubscribeResult' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /community/posts:
+    post:
+      tags: [community]
+      summary: Share a look with the community
+      description: |
+        Shows one of your looks to people with a similar style. The look is read from its source, not from this request, so
+        this is **503** until looks are available. Others see the image, occasion, your caption and a style label, never
+        your name. `confirm` must be `true`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [look_id, confirm]
+              properties:
+                look_id: { type: string, maxLength: 64 }
+                caption: { type: string, maxLength: 140 }
+                confirm: { type: boolean }
+      responses:
+        '201': { description: Shared, content: { application/json: { schema: { type: object } } } }
+        '404': { description: Not your look }
+        '409': { description: Taken down by a moderator }
+        '503': { description: Looks are not available yet }
+
+  /community/feed:
+    get:
+      tags: [community]
+      summary: Looks from similar styles
+      description: Closest style first (your dominant style, then alter ego or wildcard), then newest. Your own looks are not included. No item names or links to its author.
+      parameters:
+        - { in: query, name: occasion, schema: { type: string, maxLength: 40 } }
+        - { in: query, name: cursor, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+
+  /community/posts/mine:
+    get:
+      tags: [community]
+      summary: What you have shared
+      description: Your published and hidden looks with likes and copies.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+
+  /community/posts/{post_id}:
+    delete:
+      tags: [community]
+      summary: Take your look down
+      parameters:
+        - { in: path, name: post_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Taken down }
+        '404': { description: Not yours }
+
+  /community/posts/{post_id}/like:
+    put:
+      tags: [community]
+      summary: Like a look
+      description: Safe to repeat.
+      parameters:
+        - { in: path, name: post_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '404': { description: No such post }
+    delete:
+      tags: [community]
+      summary: Take a like back
+      parameters:
+        - { in: path, name: post_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+
+  /community/posts/{post_id}/copy:
+    post:
+      tags: [community]
+      summary: Take a look's recipe as the start of your own
+      description: Returns the occasion and recipe to hand to look generation. Counted once per person.
+      parameters:
+        - { in: path, name: post_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '404': { description: No such post }
+
+  /community/posts/{post_id}/report:
+    post:
+      tags: [community]
+      summary: Report a look
+      description: '`reason`: `inappropriate`, `not_fashion`, `spam` or `other`. One report per person; enough reports from different people hide the post (tunable: `community_hide_after_reports`).'
+      parameters:
+        - { in: path, name: post_id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, enum: [inappropriate, not_fashion, spam, other] }
+      responses:
+        '204': { description: Reported }
+        '422': { description: Unknown reason }
+
+  /community/copies:
+    get:
+      tags: [community]
+      summary: Looks you have copied
+      description: The posts whose recipe you took, newest first. Still anonymous.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+
+  /events:
+    get:
+      tags: [studio]
+      summary: Your events, soonest first
+      description: Each event carries `days_until`. At most 50 per person.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/StudioEvent' } } } } } } }
+    post:
+      tags: [studio]
+      summary: Add an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, starts_on]
+              properties:
+                title: { type: string, minLength: 2, maxLength: 80 }
+                kind: { type: string, enum: [wedding, owambe, church, naming, work, travel, other], default: other }
+                starts_on: { type: string, format: date, description: Not more than a few weeks in the past. }
+                city: { type: string, maxLength: 60, nullable: true }
+                has_fabric: { type: boolean, default: false }
+                reminders: { type: array, maxItems: 4, uniqueItems: true, items: { type: string, enum: ['0d', 1d, 3d, 7d] }, default: [3d], description: 'Any combination of the day itself and 1, 3 or 7 days before. Empty means none. Each is sent once, between 08:00 and 20:00 Lagos time.' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/StudioEvent' } } } }
+        '409': { description: Event limit reached }
+        '422': { description: Invalid event }
+
+  /events/{event_id}:
+    patch:
+      tags: [studio]
+      summary: Edit an event
+      description: Send `reminders` as the full list you want; changing it or the date re-arms the reminders still ahead.
+      parameters:
+        - { in: path, name: event_id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StudioEvent' } } } }
+        '404': { description: Not yours }
+    delete:
+      tags: [studio]
+      summary: Remove an event
+      parameters:
+        - { in: path, name: event_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Removed }
+        '404': { description: Not yours }
+
+  /tailors:
+    get:
+      tags: [studio]
+      summary: Your tailors
+      description: The phone number is stored encrypted and returned only to you.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Tailor' } } } } } } }
+    post:
+      tags: [studio]
+      summary: Add a tailor
+      description: The first tailor becomes the default. The number is normalised to E.164. At most 10.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                phone: { type: string, minLength: 7, maxLength: 24 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Tailor' } } } }
+        '409': { description: Tailor limit reached }
+        '422': { description: Not a valid phone number }
+
+  /tailors/{tailor_id}:
+    patch:
+      tags: [studio]
+      summary: Rename a tailor or make them the default
+      parameters:
+        - { in: path, name: tailor_id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                is_default: { type: boolean }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Tailor' } } } }
+        '404': { description: Not yours }
+    delete:
+      tags: [studio]
+      summary: Remove a tailor
+      parameters:
+        - { in: path, name: tailor_id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Removed }
+        '404': { description: Not yours }
+
+  /me/location:
+    put:
+      tags: [context]
+      summary: Set your rough location
+      description: Needs the `location_weather` consent. Only a 5-character geohash (about 5 km) is kept, for 30 days; the coordinates sent are discarded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number, minimum: -90, maximum: 90 }
+                longitude: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        '204': { description: Stored }
+        '403': { description: Consent `location_weather` not granted }
+        '422': { description: Coordinates out of range }
+    delete:
+      tags: [context]
+      summary: Forget your location
+      responses:
+        '204': { description: Cleared }
+
+  /me/context:
+    get:
+      tags: [context]
+      summary: The weather where you are
+      description: '`weather` is null when no location is set or the forecast provider is unreachable. Cached per cell for 30 minutes.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  weather:
+                    nullable: true
+                    type: object
+                    properties:
+                      temp_c: { type: integer }
+                      condition: { type: string, enum: [clear, cloudy, fog, rain, storm, mixed] }
+                      rain_probability: { type: integer, minimum: 0, maximum: 100 }
+  /looks/generate:
+    post:
+      tags:
+      - looks
+      summary: Generate Looks
+      description: 'Generate looks from your wardrobe.
+
+
+        Asynchronous: returns a job envelope; poll `GET /v1/looks/jobs/{job_id}` or follow the stream. With an empty wardrobe
+        the
+
+        result is reviewed archetype looks, labelled `mode: archetype`. Send `Idempotency-Key` to make a retry return the same
+        job.
+
+        Requires `ai_processing` consent; without it the call is **403**.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Send the same key to retry a request safely.
+        description: Send the same key to retry a request safely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                occasion:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  description: owambe, wedding, church, corporate, casual, date_night, travel or funeral.
+              type: object
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks/jobs/{job_id}:
+    get:
+      tags:
+      - looks
+      summary: Get Job
+      description: 'Poll a generation job.
+
+
+        The job envelope returned by `POST /v1/looks/generate`, `/regenerate` or `/adjust`. Poll until `status` is `done` or
+        `failed`
+
+        (it passes through `queued`, `analyzing`, `assembling` and `rendering`). On `done` the body carries the looks; on `failed`,
+
+        a reason code, and the attempt was not counted against you. Prefer `GET /v1/looks/jobs/{job_id}/stream` if you can consume
+
+        SSE: it removes the polling.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks/jobs/{job_id}/stream:
+    get:
+      tags:
+      - looks
+      summary: Stream Job
+      description: 'SSE: `progress` as the job moves, then `done` or `failed`, then the stream closes.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks:
+    get:
+      tags:
+      - looks
+      summary: List Looks
+      description: The looks you saved, most recently saved first.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+      security:
+      - bearerAuth: []
+
+  /looks/{look_id}:
+    get:
+      tags:
+      - looks
+      summary: Get Look
+      description: Fetch one look, including the pieces it was assembled from.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks/{look_id}/save:
+    post:
+      tags:
+      - looks
+      summary: Save Look
+      description: 'Keep a generated look.
+
+
+        Generated looks are ephemeral until saved. Idempotent: saving twice is not an error and does not produce a duplicate.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+    delete:
+      tags:
+      - looks
+      summary: Unsave Look
+      description: 'Remove a look from your saved set.
+
+
+        Returns **204**. Idempotent: un-saving a look that was not saved still returns 204.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks/{look_id}/regenerate:
+    post:
+      tags:
+      - looks
+      summary: Regenerate Look
+      description: 'Generate a fresh alternative to this look.
+
+
+        Keeps the occasion and constraints, changes the outfit, and never offers a set of pieces you have already seen in this
+        chain.
+
+        Asynchronous: returns **202** and a job id. Requires `ai_processing` consent; without it the call is **403**.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Send the same key to retry a request safely.
+        description: Send the same key to retry a request safely.
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks/{look_id}/adjust:
+    post:
+      tags:
+      - looks
+      summary: Adjust Look
+      description: 'Refine a look with an instruction ("warmer", "less formal", "no black", "more gold").
+
+
+        Unlike regenerate, this keeps the look recognisably the same and moves it in the direction asked for. If the words are
+        not
+
+        understood the job fails with `unknown_adjustment` and is not counted. Asynchronous: returns **202** and a job id.
+
+        Requires `ai_processing` consent.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Send the same key to retry a request safely.
+        description: Send the same key to retry a request safely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                instruction:
+                  type: string
+                  maxLength: 120
+                  minLength: 1
+                  description: 'In your own words: warmer, less formal, no black, more gold.'
+              type: object
+              required:
+              - instruction
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks/{look_id}/share:
+    post:
+      tags:
+      - looks
+      summary: Share Look
+      description: '**Planned — not yet implemented.** Calling it now returns 500.
+
+
+        Create a shareable image and link for a look.
+
+
+        The image is the payload: a recipient may never open the link, so the picture has to carry the whole thing on its own.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /looks/{look_id}/feedback:
+    post:
+      tags:
+      - looks
+      summary: Look Feedback
+      description: 'Record what you thought of a look.
+
+
+        Feeds later generation (what you like, what is never suggested again) when you have allowed personalisation; otherwise
+
+        nothing is kept and `recorded` is false. Worth sending even when you take no other action.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                signal:
+                  type: string
+                  description: more_like_this, saved, worn, shared, tailor_send, regenerated, dismissed or not_my_style.
+                reason:
+                  anyOf:
+                  - type: string
+                  - type: 'null'
+                  description: 'For not_my_style: too_formal or too_casual.'
+                exploration:
+                  type: boolean
+                  default: false
+              type: object
+              required:
+              - signal
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /fabric/{asset_id}/style:
+    post:
+      tags:
+      - fabric
+      summary: Style Fabric
+      description: 'What can this cloth be made into?
+
+
+        Rules select the styles from what the cloth can physically be, for today''s weather and your presentation; a model,
+        when one is
+
+        available, only words each line and can never add a style. Name the cloth: telling it from the photo arrives with the
+        vision
+
+        model. A cloth we do not know yet is a 422. Requires `ai_processing` consent.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                fabric:
+                  type: string
+                  maxLength: 80
+                  minLength: 1
+                  description: Name the cloth, for example `aso oke`, `lace`, `ankara` or `adire`.
+              type: object
+              required:
+              - fabric
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /spree/sessions:
+    post:
+      tags:
+      - spree
+      summary: Create Session
+      description: 'Open a conversational styling session.
+
+
+        Returns **201** and the session id used by the message endpoints. Requires `ai_processing` consent.'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+      security:
+      - bearerAuth: []
+
+  /spree/sessions/{session_id}/messages:
+    post:
+      tags:
+      - spree
+      summary: Send Message
+      description: 'Send a message and get the reply.
+
+
+        Off-topic input returns a templated refusal and never reaches the chat model. The assistant can only read your wardrobe
+
+        (six read-only tools), never changes anything, and never states prices or stock. The reply is one JSON body; a streamed
+
+        version arrives with the chat screen.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                message:
+                  type: string
+                  maxLength: 1000
+                  minLength: 1
+              type: object
+              required:
+              - message
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /spree/sessions/{session_id}:
+    get:
+      tags:
+      - spree
+      summary: Get Session
+      description: 'Read a session''s transcript back.
+
+
+        Used to restore a conversation when the app reopens. Messages are stored without contact details or measurements, and
+
+        deleted after 30 days.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /agent/today:
+    get:
+      tags:
+      - agent
+      summary: Get Today
+      description: 'What FAUE suggests for you today.
+
+
+        The proactive surface: one look from your wardrobe and a plain line on why, generated without you asking, dressed for
+        the event
+
+        you have today or tomorrow (if any) and the weather. One run a day: opening the app again returns the same suggestion.
+
+
+        Requires `personalization` and `ai_processing` consent; without them the call is **403**, because building this is precisely
+
+        the processing those consents cover.'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+      security:
+      - bearerAuth: []
+
+  /agent/suggestions/{run_id}/respond:
+    post:
+      tags:
+      - agent
+      summary: Respond To Suggestion
+      description: 'Record the user''s response to a suggestion.
+
+
+        `run_id` identifies the suggestion, not the look. Responses train what gets suggested next, so sending a dismissal matters
+        as
+
+        much as an acceptance. `outcome` is accepted, dismissed, saved or worn. Returns **204**.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                outcome:
+                  type: string
+              type: object
+              required:
+              - outcome
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /me/ase-notes:
+    get:
+      tags:
+      - studio
+      summary: List Notes
+      description: What you have told ASE, newest first. Paused notes are kept but not used.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - studio
+      summary: Add Note
+      description: Tell ASE something about your taste, in your own words and any language.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                text:
+                  type: string
+                  maxLength: 300
+                  minLength: 3
+              type: object
+              required:
+              - text
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+      security:
+      - bearerAuth: []
+
+  /me/ase-notes/{note_id}:
+    patch:
+      tags:
+      - studio
+      summary: Set Note
+      description: Turn a note on or off without losing it.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                active:
+                  type: boolean
+              type: object
+              required:
+              - active
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+    delete:
+      tags:
+      - studio
+      summary: Forget Note
+      description: Forget a note for good.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
+  /me/ase:
+    get:
+      tags:
+      - ase
+      summary: What Ase Knows
+      description: 'Everything ASE has learned about you: colours you like and avoid, cloths, how formal you lean, pieces it
+        will never
+
+        suggest again, how many signals that rests on, and the notes you wrote yourself.'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - ase
+      summary: Erase
+      description: 'Erase everything ASE has learned about you: signals, preferences and notes. Your wardrobe and saved looks
+        stay.'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+      security:
+      - bearerAuth: []
+
+  /me/ase/forget:
+    post:
+      tags:
+      - ase
+      summary: Forget
+      description: Forget what was learned from one piece or one colour. Takes effect on the next look.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                item_id:
+                  anyOf:
+                  - type: string
+                    maxLength: 64
+                  - type: 'null'
+                colour:
+                  anyOf:
+                  - type: string
+                    maxLength: 24
+                  - type: 'null'
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+      security:
+      - bearerAuth: []
+
+  /me/ase/facts/{key}:
+    put:
+      tags:
+      - ase
+      summary: Put Fact
+      description: 'Keep one short note about your taste (work_dress_code, favourite_occasion, avoid_materials or style_notes).
+        Contact
+
+        details and measurements are removed before it is stored. Requires `personalization` consent.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                value:
+                  type: string
+                  maxLength: 400
+                  minLength: 1
+              type: object
+              required:
+              - value
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+    delete:
+      tags:
+      - ase
+      summary: Delete Fact
+      description: Remove one of your notes.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                properties:
+                  detail:
+                    items:
+                      properties:
+                        loc:
+                          items:
+                            anyOf:
+                            - type: string
+                            - type: integer
+                          type: array
+                        msg:
+                          type: string
+                        type:
+                          type: string
+                        input: {}
+                        ctx:
+                          type: object
+                      type: object
+                      required:
+                      - loc
+                      - msg
+                      - type
+                    type: array
+                type: object
+
 components:
 
   securitySchemes:
@@ -1600,6 +3267,35 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
 
   schemas:
+    StudioEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        kind: { type: string, enum: [wedding, owambe, church, naming, work, travel, other] }
+        starts_on: { type: string, format: date }
+        city: { type: string, nullable: true }
+        has_fabric: { type: boolean }
+        reminders: { type: array, items: { type: string, enum: ['0d', 1d, 3d, 7d] }, description: Longest lead first. }
+        days_until: { type: integer }
+
+    Tailor:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: string, description: E.164 }
+        is_default: { type: boolean }
+
+    AseNote:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        text: { type: string }
+        source: { type: string, enum: [user, learned] }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
 
     Problem:
       type: object
@@ -1862,6 +3558,21 @@ components:
     Occasion:
       type: [string, 'null']
       enum: [owambe, wedding, corporate, casual, date_night, church, travel, custom, null]
+
+    SharedItem:
+      type: object
+      required: [id, source, source_url, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [tiktok, instagram, pinterest, image] }
+        source_url: { type: [string, 'null'], description: 'The canonical post address; null for an image alone.' }
+        title: { type: [string, 'null'], description: Untrusted text. Render as plain text. }
+        author_name: { type: [string, 'null'], description: Untrusted text. Render as plain text. }
+        thumbnail_url: { type: [string, 'null'], description: 'The platform''s own preview address. Prefer the upload when `asset_id` is set.' }
+        asset_id: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [ready, needs_image] }
+        reason: { type: [string, 'null'], enum: [no_preview, unavailable, null] }
+        created_at: { type: string, format: date-time }
 
     JobEnvelope:
       type: object

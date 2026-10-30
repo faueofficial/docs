@@ -4,10 +4,14 @@
 
 ## Check
 
+A request in its **waiting period** (`purge_after` in the future, `gateway` not in `modules_done`) is not late: the
+account is signed out and the data is kept on purpose. The 30-day deadline still counts from `requested_at`.
+If `purge_after` has passed and `gateway` is not done, the `dsr_purge` worker is not running.
+
 ```sql
-SELECT id, user_id, modules_pending, requested_at, sla_due_at
+SELECT id, user_id, modules_pending, modules_done, requested_at, purge_after, sla_due_at
 FROM gateway.deletion_ledger
-WHERE completed_at IS NULL ORDER BY sla_due_at;
+WHERE completed_at IS NULL AND cancelled_at IS NULL ORDER BY sla_due_at;
 ```
 
 ## Act

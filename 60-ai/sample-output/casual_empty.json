@@ -1,0 +1,89 @@
+{
+  "request": {
+    "consents": {
+      "ai_processing": true,
+      "location": true,
+      "personalisation": true
+    },
+    "items": [],
+    "occasion": "casual",
+    "gender": "male",
+    "weather": {
+      "temp_c": 29
+    }
+  },
+  "result": {
+    "job_id": "e226cb74-4491-4427-9f8a-024b9c8d8836",
+    "status": "done",
+    "kind": "generate",
+    "attempts": 1,
+    "counted": true,
+    "progress": 100,
+    "looks": [
+      {
+        "id": "018a4614-4dc7-4aba-9322-e502424463e7",
+        "job_id": "e226cb74-4491-4427-9f8a-024b9c8d8836",
+        "parent": null,
+        "mode": "archetype",
+        "pack_hash": "028fbecb8124553a60d2",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [],
+        "slot_map": {},
+        "template": "archetype",
+        "confidence": 0.0,
+        "archetype": {
+          "name": "Earth brown kaftan with tan sandals",
+          "occasions": [
+            "casual",
+            "travel",
+            "church"
+          ],
+          "weather": {
+            "min_c": 24.0,
+            "max_c": 36.0
+          },
+          "pieces": [
+            "earth brown kaftan",
+            "tan sandals"
+          ],
+          "why_this_works": "A single loose layer in a natural colour is the coolest way to dress in the heat and still look put together."
+        },
+        "card_id": "sc_rel_m_casual_01",
+        "card_hash": "dbbad6d29560fd30"
+      },
+      {
+        "id": "d409a200-3dcd-4ad7-8b27-35d6769f234e",
+        "job_id": "e226cb74-4491-4427-9f8a-024b9c8d8836",
+        "parent": null,
+        "mode": "archetype",
+        "pack_hash": "028fbecb8124553a60d2",
+        "skill_version": "2ce0d2681834da60",
+        "item_ids": [],
+        "slot_map": {},
+        "template": "archetype",
+        "confidence": 0.0,
+        "archetype": {
+          "name": "Ankara print shirt with stone chinos",
+          "occasions": [
+            "date_night",
+            "casual"
+          ],
+          "weather": {
+            "min_c": 22.0,
+            "max_c": 34.0
+          },
+          "pieces": [
+            "orange and navy shirt",
+            "stone chinos",
+            "brown loafers"
+          ],
+          "why_this_works": "The print carries the look, so the trousers and shoes stay quiet and let it stand out."
+        },
+        "card_id": "sc_smart_m_date_01",
+        "card_hash": "6a2e4f39bd3e1cfe"
+      }
+    ],
+    "mode": "archetype",
+    "warnings": []
+  }
+}

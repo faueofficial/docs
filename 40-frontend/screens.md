@@ -197,3 +197,20 @@ Deep-link targets are documented in [`deeplinks.md`](deeplinks.md). Notification
 - Endpoints are exact operation paths from [`../30-contracts/openapi/gateway.v1.yaml`](../30-contracts/openapi/gateway.v1.yaml). If they disagree, the contract wins.
 - Every screen lists loading, empty, and error states. A screen without an empty state is unfinished; several designed screens already pair with explicit empty states, which is the standard to hold.
 - Update `status` as screens are built. `designed` alone means the contract may still move.
+
+## Studio and looks (web-app, built behind `NEXT_PUBLIC_LOOKS_AVAILABLE`)
+
+| Route | Purpose | Backend |
+|---|---|---|
+| `/studio` | Today's edit, start tiles, week, next event, gaps, what ASE knows | `GET /agent/today` (flag), `/events`, `/me/ase-notes` |
+| `/studio/make` | Event, feel, build-from (vault or fabric), note; Make my looks | `POST /looks/generate`; 403 opens the `ai_processing` consent sheet; 429 shows the limit state |
+| `/studio/building?job=` | Progress from the job, failure says it did not count against the limit | `GET /looks/jobs/{id}` polled every 1.5 s |
+| `/looks/results?job=` | The generated looks | `GET /looks/{id}` |
+| `/looks/view?id=` | Save, share to community, more like this / not for me (with "what was off"), I'll wear it, send to tailor | `/looks/{id}/save`, `/feedback`, `/vault/wear` |
+| `/studio/tailor?look=` | Review the exact message, choose the tailor, open WhatsApp (`wa.me`); measurements never included | `GET /tailors` |
+| `/studio/first` | First looks from Style DNA before any piece is added | `GET /looks?filter=recent` (flag) |
+| `/studio/gaps` | Wardrobe gaps counted from the vault and events (rules, no ASE) | `/vault/items`, `/events` |
+| `/studio/events`, `/studio/teach`, `/studio/knows` | Events, lasting notes for ASE, what ASE knows | `/events`, `/me/ase-notes` |
+
+Offline: wear logs made without a connection are kept in `localStorage` (`faue.wearQueue`, 50 max) and sent when the browser comes back online.
+Not yet built: weather degree in the date chip (needs `PUT /me/location` and `GET /me/context` on the gateway).
