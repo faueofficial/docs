@@ -89,6 +89,19 @@ The current numbers are in [Pinterest's rate limits](https://developers.pinteres
 
 ---
 
+### Which host to use (checked against Pinterest's pages, 2026-10-30)
+
+- **Reading a person's real boards and pins works on Trial**, on the production host `https://api.pinterest.com`. That is `PINTEREST_API_BASE`'s default.
+- A token made at `https://api-sandbox.pinterest.com/v5/oauth/token` ("insert `-sandbox` into the request URL") is a **sandbox** token and sees only sandbox boards. Point the base at the sandbox host only to test with boards created on Trial, never to read real ones. A production token against the sandbox host, or the reverse, answers 401.
+- `continuous_refresh` is not needed: apps created on or after 25 September 2025 get continuous refresh tokens automatically.
+- On Trial every request counts against 1,000 a day for the whole app. One sync of one account is about 13 requests (boards, then the pins of up to 10 boards), so roughly 75 accounts a day. Plan the move to Standard before launch.
+
+### Checking the connection
+
+`python scripts/pinterest_check.py` (from `api-gateway/`) prints what is configured and whether the redirect address is one registered with Pinterest. `--authorize` prints the address to approve access; `--code <code>` exchanges the code you land back with and reads your boards (read-only). It prints HTTP statuses, Pinterest's own error code and message, and counts, never the secret, a token or the code.
+
+When a connection fails the browser comes back with `?pinterest=error&reason=<why>`: `grant_rejected` (code used or expired, or the redirect differs from the one registered), `credentials_rejected` (wrong id or secret, or the host and the token do not match), `rate_limited`, `unavailable`, `state_expired`, `not_configured`. The gateway logs the same reason with Pinterest's status, error code and message.
+
 ## 5. OAuth, as Pinterest documents it
 
 Source: [Set up authentication and authorization](https://developers.pinterest.com/docs/getting-started/set-up-authentication-and-authorization/).

@@ -480,6 +480,55 @@ paths:
                       - type
                     type: array
                 type: object
+
+  /internal/looks/{look_id}/image:
+    post:
+      tags:
+      - looks
+      summary: Look Image
+      description: 'A generated picture of an **archetype** look (a reviewed style card shown to someone whose vault is empty).
+  
+  
+        A look built from the person''s own pieces is **409**: a model could change a garment, so those are shown with the person''s own
+  
+        photos and never drawn. **424** when pictures cannot be drawn (not configured, switched off, over budget or the provider failed);
+  
+        the caller then draws its card without a picture.'
+      operationId: look_image_internal_looks__look_id__image_post
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Look Id
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            image/png: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /internal/memory:
     get:
       tags:
@@ -921,6 +970,45 @@ paths:
                       - type
                     type: array
                 type: object
+
+  /internal/fabric/style-image:
+    post:
+      tags:
+      - fabric
+      summary: Style Image
+      description: 'A generated picture of a garment sewn in a cloth, for the tailor card. The cloth has not been made into this yet, so a picture
+        is
+  
+        the honest way to show it. **422** for a cloth or style we do not know; **424** when pictures cannot be drawn.'
+      operationId: style_image_internal_fabric_style_image_post
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StyleImageRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            image/png: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /internal/spree/sessions:
     post:
       tags:
@@ -1408,18 +1496,18 @@ paths:
                       - type
                     type: array
                 type: object
-  /internal/embeddings/reembed:
+
+
+  /internal/embeddings/fabric-match:
     post:
       tags:
       - embeddings
-      summary: Reembed
-      description: '**Planned — not yet implemented.** Calling it now returns 500.
-
-
-        Re-embed a user''s vault with a new embedding model.
-
-
-        Dual-write, shadow-evaluate, then flip; never in place. Needs the hosted embedding model, which is not chosen yet.'
+      summary: Fabric Match
+      description: 'The catalogue cloths nearest to a name the aliases do not know, best first, with a score. A suggestion to confirm with the person,
+        never
+  
+        a decision: the cloth they confirm goes to `/internal/fabric/suggest`.'
+      operationId: fabric_match_internal_embeddings_fabric_match_post
       security:
       - serviceAuth: []
       parameters:
@@ -1430,6 +1518,13 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
+          title: X-Ase-Service-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FabricMatchRequest'
       responses:
         '200':
           description: Successful Response
@@ -1438,35 +1533,100 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                title: Response Fabric Match Internal Embeddings Fabric Match Post
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                properties:
-                  detail:
-                    items:
-                      properties:
-                        loc:
-                          items:
-                            anyOf:
-                            - type: string
-                            - type: integer
-                          type: array
-                        msg:
-                          type: string
-                        type:
-                          type: string
-                        input: {}
-                        ctx:
-                          type: object
-                      type: object
-                      required:
-                      - loc
-                      - msg
-                      - type
-                    type: array
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/embeddings/similar:
+    post:
+      tags:
+      - embeddings
+      summary: Similar
+      description: 'The person''s other pieces nearest to one piece, best first. Only their own pieces are ever returned. Empty when the piece has
+        no
+  
+        vector yet (call `reembed` first).'
+      operationId: similar_internal_embeddings_similar_post
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimilarRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
                 type: object
+                additionalProperties: true
+                title: Response Similar Internal Embeddings Similar Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/embeddings/reembed:
+    post:
+      tags:
+      - embeddings
+      summary: Reembed
+      description: 'Make or refresh the vectors for some of a person''s pieces, from a short redacted description of each (name, category, colours,
+        cloth).
+  
+  
+        Idempotent: a piece whose description has not changed is skipped. Needs `ai_processing` consent (without it, `refused: no_consent` and
+  
+        nothing is sent anywhere). **424** when no embedding model is configured or the provider fails: the product carries on without vectors.'
+      operationId: reembed_internal_embeddings_reembed_post
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReembedRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Reembed Internal Embeddings Reembed Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /internal/admin/health:
     get:
       tags:
@@ -1933,6 +2093,159 @@ components:
                 enum: [context, filter, assemble, rank, render, explain]
 
   schemas:
+    SimilarRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        limit:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Limit
+          default: 5
+      type: object
+      required:
+      - user_id
+      - item_id
+      title: SimilarRequest
+    ReembedRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        workspace_id:
+          type: string
+          format: uuid
+          title: Workspace Id
+        consent:
+          type: boolean
+          title: Consent
+          description: '`ai_processing`. Without it nothing leaves ase and nothing is embedded.'
+          default: false
+        items:
+          items:
+            $ref: '#/components/schemas/ReembedItem'
+          type: array
+          maxItems: 100
+          minItems: 1
+          title: Items
+      type: object
+      required:
+      - user_id
+      - workspace_id
+      - items
+      title: ReembedRequest
+    ReembedItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          maxLength: 120
+          title: Name
+          default: ''
+        category:
+          type: string
+          maxLength: 20
+          title: Category
+          default: ''
+        colours:
+          items:
+            type: string
+          type: array
+          maxItems: 6
+          title: Colours
+        fabric:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Fabric
+      type: object
+      required:
+      - id
+      title: ReembedItem
+    FabricMatchRequest:
+      properties:
+        text:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Text
+          description: 'Whatever the person called the cloth: `african wax print`, `that shiny lace`.'
+        limit:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Limit
+          default: 3
+      type: object
+      required:
+      - text
+      title: FabricMatchRequest
+    ImageRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        ratio:
+          type: string
+          title: Ratio
+          description: '4x5, 9x16, 1x1 or og: the share shape the picture is drawn for.'
+          default: 4x5
+      type: object
+      required:
+      - user_id
+      title: ImageRequest
+    StyleImageRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        fabric:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Fabric
+        garment:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Garment
+          description: The style, such as `agbada` or `buba and iro`.
+        colours:
+          items:
+            type: string
+          type: array
+          maxItems: 3
+          title: Colours
+        gender:
+          anyOf:
+          - type: string
+            pattern: ^(male|female)$
+          - type: 'null'
+          title: Gender
+        ratio:
+          type: string
+          title: Ratio
+          default: 4x5
+      type: object
+      required:
+      - user_id
+      - fabric
+      - garment
+      title: StyleImageRequest
 
     Constraints:
       type: object

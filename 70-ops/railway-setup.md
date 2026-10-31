@@ -629,3 +629,20 @@ Ordered by how likely each is to be your first failure.
 10. **Admin cannot sign in** — Redis unreachable. It is a hard dependency, not a
     cache. §3.
 11. **Magic links never arrive** — DNS not verified in Resend. §8.
+
+
+## Model, embedding and messaging variables (added 2026-10-30)
+
+| Variable | Service | Purpose |
+|---|---|---|
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (or `CLOUDFLARE_WORKER_AI_KEY`) | `ase` | Workers AI for the `fast` and `vision` tiers, embeddings and generated pictures. The token needs the Workers AI permission |
+| `OPENROUTER_API_KEY` | `ase` | Every slug in `models.yaml` that is not `@cf/...` |
+| `EMBEDDING_PROVIDER=openrouter`, `EMBEDDING_MODEL_ID=openai/text-embedding-3-small` | `ase` | Text vectors for pieces and cloths: OpenAI's model through the OpenRouter account (1536 numbers, about $0.0000002 per call, checked live 2026-10-30). `openai/text-embedding-3-large` (3072) also works. The Cloudflare alternative is `EMBEDDING_PROVIDER=workers_ai` with `@cf/baai/bge-m3` (1024, multilingual, no OpenRouter spend). An `open_clip/...` model is a self-hosted image model and is reported as unusable |
+| `RABBITMQ_URL`, `EVENT_TRANSPORT=rabbit` | `api-gateway`, workers, `ase-events` | The broker. `inprocess` is the default and never reaches another process |
+| `TERMII_API_KEY`, `SMS_SENDER_ID` | `api-gateway`, workers | Termii |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` or `TWILIO_MESSAGING_SERVICE_SID` | `api-gateway`, workers | Twilio, an alternative text-message provider |
+| `AFRICASTALKING_API_KEY`, `AFRICASTALKING_USERNAME` (`sandbox` while testing), `AFRICASTALKING_SENDER_ID` | `api-gateway`, workers | Africa's Talking |
+
+Which text-message provider sends is chosen in the admin console, Settings, Messaging. A provider with no keys here cannot be chosen.
+
+Check the model accounts with `python scripts/providers_check.py` (add `--live` for one tiny call per model) in `ase/`. For Pinterest, `python scripts/pinterest_check.py` in `api-gateway/`.

@@ -23,7 +23,7 @@ eval-sets/
 ├─ adjust_instructions/ cases.jsonl  (30: words to a bounded change, contradictions and injection text refused; gate 100 %)
 ├─ spree_safety/     cases.jsonl  (33: injection flagged, off-topic turned away, unsafe images refused, bad replies stopped; gate 100 %)
 ├─ explain_grounding/ cases.jsonl  (16: a model's reason kept only if it names nothing the look lacks; gate 100 %)
-├─ look_rank/        cases.jsonl  (14 regression anchors until stylist rankings replace them; gate 90 %)
+├─ look_rank/        cases.jsonl  (14 regression anchors) · rankings.jsonl (graded candidate sets) · baseline.json · README.md; gate 90 %, plus nDCG@10 0.85 on stylist cases once 30 exist
 └─ worn_extraction/  cases/  labels.jsonl  README.md   (planned; see ase-architecture.md 4.7.2)
 ```
 

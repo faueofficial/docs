@@ -948,53 +948,106 @@ paths:
 
   /fabric/{asset_id}/tailor-share:
     post:
-      tags: [fabric]
-      summary: Create a tailor-ready share image
-      description: |
-        `MVP` Composites the fabric photograph, the chosen style reference, the user's
-        notes, and FAUE branding into one image suitable for WhatsApp.
-      parameters: [{ $ref: '#/components/parameters/AssetId' }]
+      tags:
+      - fabric
+      summary: Tailor Share
+      description: 'The card for your tailor, as a JPEG to send over WhatsApp: your fabric, the style, what to make, notes and measurements.
+
+
+        Image-first: the tailor may never tap a link, so the picture carries everything, in large type on a plain ground that reads on a
+
+        cracked screen in poor light. Measurements go into the picture only; they are not stored or logged. The illustration, when there is
+
+        one, is labelled as an illustration.'
+      operationId: tailor_share_v1_fabric__asset_id__tailor_share_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Asset Id
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [style_id]
-              properties:
-                style_id: { type: string, format: uuid }
-                notes: { type: string, maxLength: 500, description: 'Measurements or instructions for the tailor' }
+              $ref: '#/components/schemas/TailorShareIn'
       responses:
         '200':
-          description: OK
+          description: Successful Response
+          content:
+            image/jpeg: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                required: [image_url]
-                properties:
-                  image_url: { type: string, format: uri }
+                $ref: '#/components/schemas/HTTPValidationError'
 
   # ──────────────────────────────── spree ────────────────────────────────
 
   /agent/settings:
     get:
-      tags: [agent]
-      summary: Get agent settings
-      description: '`M1-2`'
+      tags:
+      - agent
+      summary: Get Agent Settings
+      description: 'How your daily suggestion behaves: whether it runs each day, at what hour, whether it uses the weather, and how much it does
+        on its own.
+
+
+        `built_level` is the highest `autonomy_level` that does anything today (0: a suggestion when the app opens). Higher levels are kept for
+
+        when they exist.'
+      operationId: get_agent_settings_v1_agent_settings_get
       responses:
-        '200': { description: 'OK', content: { application/json: { schema: { $ref: '#/components/schemas/AgentSettings' } } } }
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Get Agent Settings V1 Agent Settings Get
+      security:
+      - bearerAuth: []
     put:
-      tags: [agent]
-      summary: Update agent settings
-      description: '`M1-2` `Consent: agent_proactive` for daily suggestions.'
+      tags:
+      - agent
+      summary: Update Agent Settings
+      description: 'Change how your daily suggestion behaves. Send only the fields you are changing.
+
+
+        Turning on the daily suggestion, or any autonomy level above 0, is **403** unless you have granted `agent_proactive`; the problem names
+
+        that consent so the app can ask for it.'
+      operationId: update_agent_settings_v1_agent_settings_put
       requestBody:
-        required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/AgentSettings' }
+            schema:
+              $ref: '#/components/schemas/AgentSettingsIn'
+        required: true
       responses:
-        '200': { description: 'Updated', content: { application/json: { schema: { $ref: '#/components/schemas/AgentSettings' } } } }
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Update Agent Settings V1 Agent Settings Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
 
   /integrations:
     get:
@@ -1058,6 +1111,59 @@ paths:
         '403': { $ref: '#/components/responses/ConsentRequired' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: 'Needs reconnecting, or an import is already running' }
+
+  /integrations/pinterest/boards/{board_id}/pins:
+    get:
+      tags:
+      - integrations
+      summary: Pinterest Board Pins
+      description: 'The pins on one of your boards, a page at a time, so you can look before you import.
+
+
+        Read live from Pinterest and not stored. A board that is not yours, or that Pinterest will not show this app, is **403**; a
+
+        connection that needs signing in again is **409**; Pinterest being busy is **503**.'
+      operationId: pinterest_board_pins_v1_integrations_pinterest_boards__board_id__pins_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: board_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Board Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 24
+          title: Limit
+      - name: bookmark
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 512
+          - type: 'null'
+          title: Bookmark
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PinterestPins'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 
   /integrations/pinterest/import:
     post:
@@ -1840,13 +1946,12 @@ paths:
       description: 'Generate looks from your wardrobe.
 
 
-        Asynchronous: returns a job envelope; poll `GET /v1/looks/jobs/{job_id}` or follow the stream. With an empty wardrobe
-        the
+        Asynchronous: returns a job envelope; poll `GET /v1/looks/jobs/{job_id}` or follow the stream. With an empty wardrobe the
 
-        result is reviewed archetype looks, labelled `mode: archetype`. Send `Idempotency-Key` to make a retry return the same
-        job.
+        result is reviewed archetype looks, labelled `mode: archetype`. Send `Idempotency-Key` to make a retry return the same job.
 
         Requires `ai_processing` consent; without it the call is **403**.'
+      operationId: generate_looks_v1_looks_generate_post
       security:
       - bearerAuth: []
       parameters:
@@ -1858,19 +1963,14 @@ paths:
           - type: string
           - type: 'null'
           description: Send the same key to retry a request safely.
+          title: Idempotency-Key
         description: Send the same key to retry a request safely.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              properties:
-                occasion:
-                  anyOf:
-                  - type: string
-                  - type: 'null'
-                  description: owambe, wedding, church, corporate, casual, date_night, travel or funeral.
-              type: object
+              $ref: '#/components/schemas/GenerateIn'
       responses:
         '202':
           description: Successful Response
@@ -1879,35 +1979,13 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                title: Response Generate Looks V1 Looks Generate Post
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                properties:
-                  detail:
-                    items:
-                      properties:
-                        loc:
-                          items:
-                            anyOf:
-                            - type: string
-                            - type: integer
-                          type: array
-                        msg:
-                          type: string
-                        type:
-                          type: string
-                        input: {}
-                        ctx:
-                          type: object
-                      type: object
-                      required:
-                      - loc
-                      - msg
-                      - type
-                    type: array
-                type: object
+                $ref: '#/components/schemas/HTTPValidationError'
 
   /looks/jobs/{job_id}:
     get:
@@ -2348,13 +2426,15 @@ paths:
       tags:
       - looks
       summary: Share Look
-      description: '**Planned — not yet implemented.** Calling it now returns 500.
+      description: 'What you can share a look as: the shapes it can be downloaded in (feed, stories, square, link preview), a caption, and the shape
+
+        that suits where you are sharing to.
 
 
-        Create a shareable image and link for a look.
+        The image is the payload: a recipient may never open a link, so the picture carries the whole look. Nothing is published or stored:
 
-
-        The image is the payload: a recipient may never open the link, so the picture has to carry the whole thing on its own.'
+        each `download_url` draws the card when you fetch it.'
+      operationId: share_look_v1_looks__look_id__share_post
       security:
       - bearerAuth: []
       parameters:
@@ -2363,6 +2443,15 @@ paths:
         required: true
         schema:
           type: string
+          title: Look Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/ShareIn'
+              - type: 'null'
+              title: Body
       responses:
         '200':
           description: Successful Response
@@ -2371,35 +2460,54 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                title: Response Share Look V1 Looks  Look Id  Share Post
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                properties:
-                  detail:
-                    items:
-                      properties:
-                        loc:
-                          items:
-                            anyOf:
-                            - type: string
-                            - type: integer
-                          type: array
-                        msg:
-                          type: string
-                        type:
-                          type: string
-                        input: {}
-                        ctx:
-                          type: object
-                      type: object
-                      required:
-                      - loc
-                      - msg
-                      - type
-                    type: array
-                type: object
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /looks/{look_id}/share-image:
+    get:
+      tags:
+      - looks
+      summary: Share Image
+      description: 'The look card as a JPEG to download, in the shape you ask for: `4x5` feed, `9x16` stories and status, `1x1` square or `og` link
+        preview.
+
+
+        A look from your own wardrobe is shown with your own photos. A look with nothing owned (your first, from a style card) gets a
+
+        generated picture when one can be drawn, and is drawn without one when it cannot. Sent as an attachment, never cached.'
+      operationId: share_image_v1_looks__look_id__share_image_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: look_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Look Id
+      - name: ratio
+        in: query
+        required: false
+        schema:
+          type: string
+          default: 4x5
+          title: Ratio
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            image/jpeg: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 
   /looks/{look_id}/feedback:
     post:
@@ -3267,6 +3375,210 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
 
   schemas:
+    PinterestPins:
+      properties:
+        board_id:
+          type: string
+          title: Board Id
+        pins:
+          items:
+            $ref: '#/components/schemas/PinterestPin'
+          type: array
+          title: Pins
+        next_bookmark:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Bookmark
+          description: Send it back as `bookmark` for the next page. Null on the last page.
+      type: object
+      required:
+      - board_id
+      - pins
+      title: PinterestPins
+    PinterestPin:
+      properties:
+        pin_id:
+          type: string
+          title: Pin Id
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        image_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image Url
+          description: On Pinterest's image host only. Null for a pin with no image (a video, say).
+        imported:
+          type: boolean
+          title: Imported
+      type: object
+      required:
+      - pin_id
+      - imported
+      title: PinterestPin
+    GenerateIn:
+      properties:
+        occasion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Occasion
+          description: owambe, wedding, church, corporate, casual, date_night, travel or funeral.
+        event_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Event Id
+          description: One of your own events. Its kind sets the occasion when you send none, and the look is dressed for it.
+        mood:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Mood
+          description: 'How you want it to feel, in your words: elegant, bold, understated. Used only with personalisation consent.'
+        note:
+          anyOf:
+          - type: string
+            maxLength: 280
+          - type: 'null'
+          title: Note
+          description: Anything else, in your words. Used only with personalisation consent; contact details are removed.
+      type: object
+      title: GenerateIn
+    AgentSettingsIn:
+      properties:
+        daily_enabled:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Daily Enabled
+          description: A suggestion each day. Needs the `agent_proactive` consent to turn on.
+        daily_hour_local:
+          anyOf:
+          - type: integer
+            maximum: 23.0
+            minimum: 0.0
+          - type: 'null'
+          title: Daily Hour Local
+          description: The hour, Lagos time, the daily suggestion is for.
+        use_weather:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Use Weather
+          description: Dress for today's weather. Only used with location consent.
+        autonomy_level:
+          anyOf:
+          - type: integer
+            maximum: 3.0
+            minimum: 0.0
+          - type: 'null'
+          title: Autonomy Level
+          description: 0 on open, 1 daily push, 2 proactive triggers, 3 planning. Level 1 and above need `agent_proactive`.
+      type: object
+      title: AgentSettingsIn
+      description: Send only what you are changing; the rest is kept.
+    Measurement:
+      properties:
+        label:
+          type: string
+          maxLength: 24
+          minLength: 1
+          title: Label
+          examples:
+          - Chest
+        value:
+          type: string
+          maxLength: 16
+          minLength: 1
+          title: Value
+          examples:
+          - '42'
+      type: object
+      required:
+      - label
+      - value
+      title: Measurement
+    ShareIn:
+      properties:
+        destination:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination
+          description: 'Where it is going: whatsapp_status, instagram_story, instagram_feed, whatsapp_chat, square, x or link_preview. Picks the default
+            shape; every shape is listed.'
+      type: object
+      title: ShareIn
+    TailorShareIn:
+      properties:
+        style:
+          type: string
+          maxLength: 90
+          minLength: 1
+          title: Style
+          description: The style chosen, as the heading of the card.
+          examples:
+          - Agbada with a matching fila
+        fabric:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Fabric
+          description: The cloth's name, for example `aso oke`. Also lets the card show an illustration of the style.
+        garment:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Garment
+          description: What to make, in a line.
+        colours:
+          items:
+            type: string
+          type: array
+          maxItems: 3
+          title: Colours
+          description: Up to three colours, for the illustration.
+        note:
+          anyOf:
+          - type: string
+            maxLength: 400
+          - type: 'null'
+          title: Note
+        measurements:
+          items:
+            $ref: '#/components/schemas/Measurement'
+          type: array
+          maxItems: 14
+          title: Measurements
+        unit:
+          type: string
+          pattern: ^(in|cm)$
+          title: Unit
+          default: in
+        include_illustration:
+          type: boolean
+          title: Include Illustration
+          description: Add a generated illustration of the style in this cloth when one can be drawn. Needs `ai_processing` consent; the card is made
+            without it otherwise.
+          default: true
+      type: object
+      required:
+      - style
+      title: TailorShareIn
     StudioEvent:
       type: object
       properties:
@@ -3708,6 +4020,7 @@ components:
         daily_hour_local: { type: integer, minimum: 0, maximum: 23 }
         use_weather: { type: boolean }
         autonomy_level: { type: integer, minimum: 0, maximum: 3, description: '0 on-open, 1 daily push, 2 proactive triggers, 3 planning' }
+        built_level: { type: integer, description: 'The highest autonomy_level that does anything today (0). Higher levels are stored for when they exist.' }
 
     Integration:
       type: object

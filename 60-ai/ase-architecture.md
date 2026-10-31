@@ -726,6 +726,14 @@ Open cultural question recorded by `look_rank_004`: whether a fila should match 
 
 ---
 
+### 9.0.1 Changes on 2026-10-30
+
+- **look-pipeline gains a `narrate` phase (05).** After `words`, a model (task `look.reasoning`, fast tier) writes each look's reason from the event (kind, name, days away), today's temperature, liked colours, the pieces by the person's own names, which have never been worn, and the colour story, and is told to make the looks read differently from each other. A reason is kept only if `reason_is_grounded` passes: no piece or colour the look lacks, no number except the temperature and the days to the event, no occasion word except the look's own or the event's, none of the banned claims. Otherwise the engine's sentences stand. Phase files are now 01-context, 02-pool, 03-rank, 04-words, 05-narrate, 06-render, 07-validate.
+- **The engine's own sentences (`engine/explain.py`) were rewritten.** Thirteen claims, most specific first (an unworn piece, a liked colour, a deliberate contrast, the dressiest piece, the finishing accessory) before the generic ones (occasion, temperature); two or three phrasings each, picked from the look's own pieces; each piece is named in at most one sentence; titles vary by position in the set. Still only facts the engine measured.
+- **Context pack accepts `event`** `{kind, name, days_until}`, cleaned and bounded (name at most 60 characters, no contact details). The gateway sends it for the nearest event in the next 14 days that matches the requested occasion; the person's own title only with personalisation consent.
+- **Pictures where nothing is owned.** `POST /internal/looks/{id}/image` (archetype looks only; an owned look is 409 because a model could change the garment) and `POST /internal/fabric/style-image`, through `models/render/generative.py` (Workers AI, FLUX.2 Klein) with the same kill switches, budgets and call log as every model call. They answer 424 when a picture cannot be drawn, deliberately not a 5xx, so a missing picture never opens the gateway's circuit breaker for ase.
+- **Share cards (gateway).** Look and tailor cards are drawn on request in four shapes (`4x5`, `9x16`, `1x1`, `og`), returned as the download, and never stored. Samples: `sample-output/cards/`.
+
 ## 9. What exists today (review of `ase/`, 2026-10-15)
 
 | Area | State | Evidence |

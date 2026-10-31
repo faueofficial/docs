@@ -16,6 +16,36 @@ Format: newest first. Each entry states the change, its type, and what a consume
 
 ---
 
+## 2026-10-30 (evening) — Pinterest boards you can browse, agent settings, text vectors, an SMS switch
+
+**Gateway (additive)**
+- New `GET /v1/integrations/pinterest/boards/{board_id}/pins?limit=&bookmark=`: a page of a board's pins (title, description, image on Pinterest's image host, `imported`) and `next_bookmark`. Read live, not stored. 403 for a board Pinterest will not show this app (not retried), 409 when the connection needs signing in again.
+- The Pinterest callback redirect now carries `?pinterest=error&reason=` with one of `grant_rejected`, `credentials_rejected`, `rate_limited`, `unavailable`, `state_expired`, `not_configured`, `pinterest_error`, `unexpected`.
+- `GET` and `PUT /v1/agent/settings` are implemented (were stubs). `PUT` takes only the fields being changed; turning on `daily_enabled` or an `autonomy_level` of 1 or more is 403 naming `agent_proactive` unless granted. The response adds `built_level` (0). `use_weather: false` leaves the weather out of looks.
+- `POST /v1/looks/generate` accepts `event_id` (one of your events), `mood` and `note` (the last two are used only with personalisation consent).
+- Admin: the runtime setting `sms_provider` (`termii`, `africastalking`, `twilio`, `off`) is a new `choice` kind; the settings listing gains `choices` (each value `ready` or `no credentials`). Choosing a provider with no keys in the environment is 422.
+- Community publishing now works: the look card is stored as the post's public picture and deleted with the post and with the account.
+
+**Database (expand-only):** migration `0027_agent_settings` adds `gateway.agent_settings`.
+
+**ase (internal, additive)**
+- `POST /internal/embeddings/reembed` is implemented (was a stub), with new `POST /internal/embeddings/similar` and `POST /internal/embeddings/fabric-match`. Text vectors of a redacted description of each piece or cloth, through Cloudflare Workers AI (`@cf/baai/bge-m3`, 1024 numbers) or OpenRouter. 424 (not a 5xx) when no embedding model is configured.
+- Settings: `EMBEDDING_PROVIDER` accepts `workers_ai` and `openrouter` (`openai/text-embedding-3-small` through OpenRouter works and is what ASE is set to); `CLOUDFLARE_WORKER_AI_KEY` is read as the Workers AI token as well as `CLOUDFLARE_API_TOKEN`.
+
+## 2026-10-30 — Share cards, picture shapes, and reasons written from the whole look
+
+**Gateway (additive)**
+- `POST /v1/looks/{id}/share` now works. It returns the shapes a look can be downloaded in (`4x5` feed, `9x16` stories and status, `1x1` square, `og` link preview), a caption, and the default shape for an optional `destination`.
+- New `GET /v1/looks/{id}/share-image?ratio=` returns the look card as a JPEG attachment. A look from the person's own wardrobe shows their own photos and is never drawn by a model. A look with nothing owned (an empty-vault style card) gets a generated picture when ase can draw one, and the card is made without one when it cannot.
+- `POST /v1/fabric/{id}/tailor-share` now works and returns the tailor card as a JPEG (fabric photo, style, what to make, notes, measurements, and an illustration of the style in the cloth when one can be drawn, labelled as an illustration). New request body `TailorShareIn`. Measurements are not stored or logged.
+- Neither card is stored or given a public address: each is drawn when asked for. Nothing to purge on account deletion.
+- `POST /v1/looks/generate` now sends ase the nearest matching upcoming event (`kind`, `days_until`, and the person's own title only with personalisation consent).
+
+**ase (internal, additive)**
+- New `POST /internal/looks/{id}/image` (archetype looks only; **409** for an owned look) and `POST /internal/fabric/style-image`. Both answer **424** when a picture cannot be drawn, deliberately not a 5xx, so a missing picture never trips the gateway's circuit breaker.
+- Context pack accepts `event: {kind, name, days_until}`.
+- The look-pipeline skill gains a `narrate` phase (05): a model writes each look's reason from the event, weather, taste, pieces and colour story, kept only if it passes the grounding check. The engine's own sentences, now varied per look and drawn from more facts, remain the fallback.
+
 ## 2026-10-21 — The styling engine is connected
 
 | Change | Type | Consumer action |
