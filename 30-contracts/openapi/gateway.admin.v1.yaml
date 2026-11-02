@@ -846,6 +846,140 @@ paths:
         '404': { description: No such post }
         '409': { description: Already in that state, or taken down by its author }
 
+  /ase/overview:
+    get:
+      tags: [admin-ase]
+      summary: Styling engine health, spend and skills
+      description: |
+        `Capability: model_config.read`. Audited as `ase.viewed`. Each part stands alone: a part ASE could not
+        answer is `null` and named in `unavailable`, so one failed read does not blank the page.
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 90, default: 7 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [health, costs, skills, unavailable]
+                properties:
+                  health: { type: [object, 'null'], description: 'Providers, tasks with and without a model, switches, mode, content in force (rules, cards, references waiting for review).' }
+                  costs: { type: [object, 'null'], description: 'Spend by task over the window, template share, cost per styling call and the budget ceilings.' }
+                  skills: { type: [array, 'null'], items: { type: object } }
+                  unavailable: { type: array, items: { type: string, enum: [health, costs, skills] } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /ase/model-config:
+    get:
+      tags: [admin-ase]
+      summary: Model configuration in force
+      description: '`Capability: model_config.read`. Tiers, tasks, budgets and the renderer as ASE is running them. Audited.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /ase/model-catalog:
+    get:
+      tags: [admin-ase]
+      summary: Every model that can be chosen, with prices
+      description: |
+        `Capability: model_config.read`. Read live from OpenRouter (`GET /api/v1/models?zdr=true`, zero-data-retention
+        models only) and Cloudflare Workers AI (`GET /accounts/{id}/ai/models/search?task=Text Generation`), cached
+        ten minutes. Prices are US dollars per million tokens; `null` means the provider publishes none, which is not
+        free. `errors` names a provider that could not be read; its last good list is kept.
+      parameters:
+        - { name: refresh, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [models, errors]
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, provider, name, input_per_million, output_per_million, context_length, vision, tools, note]
+                      properties:
+                        id: { type: string, example: '@cf/mistralai/mistral-small-3.1-24b-instruct' }
+                        provider: { type: string, enum: [openrouter, cloudflare] }
+                        name: { type: string }
+                        input_per_million: { type: [number, 'null'] }
+                        output_per_million: { type: [number, 'null'] }
+                        context_length: { type: [integer, 'null'] }
+                        vision: { type: boolean }
+                        tools: { type: boolean }
+                        note: { type: [string, 'null'], description: 'For example "Needs the Workers Paid plan".' }
+                  errors: { type: object, additionalProperties: { type: string } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /ase/model-choices:
+    get:
+      tags: [admin-ase]
+      summary: What each tier and task runs on
+      description: '`Capability: model_config.read`. The tiers from models.yaml, each task with the models in use, the choices an admin made, and `storage_ready: false` until migration 0028 has run.'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, required: [tiers, tasks, choices, storage_ready] } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /ase/model-choice:
+    post:
+      tags: [admin-ase]
+      summary: Choose the models for a tier or a task
+      description: |
+        `Capability: model_config.write`. Audited as `model_config.changed` with the justification. Up to three
+        models, tried in order; an empty list goes back to models.yaml. ASE refuses (`422`) a model that is not in
+        the catalogue, cannot read pictures or call tools where the task needs it, has no credentials, or does not
+        answer a one-line test call. Takes effect within seconds, with no deploy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, models, justification]
+              properties:
+                name: { type: string, maxLength: 64, description: 'A tier such as `fast`, or a task such as `spree.chat`. A task''s choice wins over its tier''s.' }
+                models: { type: array, maxItems: 3, items: { type: string } }
+                justification: { type: string, minLength: 10, maxLength: 500 }
+      responses:
+        '200': { description: The choices after the change., content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+        '422': { description: A model was refused, or the justification is too short. }
+
+  /ase/kill-switch:
+    post:
+      tags: [admin-ase]
+      summary: Stop or resume model spend
+      description: '`Capability: flags.write`. For the whole model plane (`model_plane`) or one task. A switched-off task answers from templates, so styling keeps working. Audited as `ase.kill_switch_changed`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, justification]
+              properties:
+                name: { type: string, maxLength: 64 }
+                disabled: { type: boolean, default: true }
+                justification: { type: string, minLength: 10, maxLength: 500 }
+      responses:
+        '200': { description: What is switched off now., content: { application/json: { schema: { type: object } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
+  /ase/review-sync:
+    post:
+      tags: [admin-ase]
+      summary: Send ASE's content for review
+      description: '`Capability: reviewer.write`. Files every style card, rule and skill reference with no approval for its current version into the review queue. Safe to repeat. In production ASE runs only approved content.'
+      responses:
+        '200': { description: Counts., content: { application/json: { schema: { type: object, required: [total, already_approved, sent_to_queue, already_in_queue] } } } }
+        '403': { $ref: '#/components/responses/MissingCapability' }
+
   /flags:
     get:
       tags: [admin-flags]

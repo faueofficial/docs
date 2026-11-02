@@ -2053,6 +2053,213 @@ paths:
                     type: array
                 type: object
 
+  /internal/memory/inspiration:
+    post:
+      tags:
+      - memory
+      summary: Learn Inspiration
+      description: 'Learn the colours in a photo the person saved. Forgetting `pin_id` undoes it. The gateway sends this only
+        with personalisation
+
+        consent. Model-free, and the picture is read and dropped: only colour names are kept.'
+      operationId: learn_inspiration_internal_memory_inspiration_post
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspirationRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Learn Inspiration Internal Memory Inspiration Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/memory/export:
+    get:
+      tags:
+      - memory
+      summary: Export
+      description: 'Everything ASE holds about a person, table by table, for their data export: what it learned, the looks it
+        made, the jobs behind
+
+        them, daily suggestions, chat and the calls made for them. Vectors are left out.'
+      operationId: export_internal_memory_export_get
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: user_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Export Internal Memory Export Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/admin/model-catalog:
+    get:
+      tags:
+      - admin
+      summary: Model Catalog
+      description: 'Every model that can be chosen, live from OpenRouter (zero-data-retention only) and Cloudflare, each with
+        its price in dollars per
+
+        million tokens. A price of null means the provider publishes none. `errors` names a provider that could not be read.'
+      operationId: model_catalog_internal_admin_model_catalog_get
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: refresh
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Refresh
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Model Catalog Internal Admin Model Catalog Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/admin/model-choices:
+    get:
+      tags:
+      - admin
+      summary: Model Choices
+      description: What each tier and task runs on right now, and which of that an admin chose.
+      operationId: model_choices_internal_admin_model_choices_get
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Model Choices Internal Admin Model Choices Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /internal/admin/model-choice:
+    post:
+      tags:
+      - admin
+      summary: Set Model Choice
+      description: 'Choose the models for a tier or a task. Takes effect within seconds, with no deploy.
+
+
+        Every model must be in the live catalogue, suit what the name is used for (pictures, tools), and answer a one-line test
+        call. A model
+
+        that cannot is refused here, so a typo or a retired model cannot quietly send a feature to templates.'
+      operationId: set_model_choice_internal_admin_model_choice_post
+      security:
+      - serviceAuth: []
+      parameters:
+      - name: X-Ase-Service-Token
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Ase-Service-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelChoiceRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Set Model Choice Internal Admin Model Choice Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
 components:
 
   securitySchemes:
@@ -2093,6 +2300,106 @@ components:
                 enum: [context, filter, assemble, rank, render, explain]
 
   schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    InspirationRequest:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        workspace_id:
+          type: string
+          format: uuid
+          title: Workspace Id
+        pin_id:
+          type: string
+          format: uuid
+          title: Pin Id
+        source:
+          type: string
+          enum:
+          - upload
+          - pinterest
+          title: Source
+          description: Where the picture came from, so a disconnect or a withdrawn consent forgets exactly that.
+          default: upload
+        image_b64:
+          type: string
+          maxLength: 2800000
+          title: Image B64
+          description: The redacted preview of the photo, base64, at most about 2 MB.
+      type: object
+      required:
+      - user_id
+      - workspace_id
+      - pin_id
+      - image_b64
+      title: InspirationRequest
+    ModelChoiceRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Name
+          description: A tier such as `fast`, or one task such as `spree.chat`. A task's choice wins over its tier's.
+        models:
+          items:
+            type: string
+          type: array
+          maxItems: 3
+          title: Models
+          description: In the order to try them. Empty hands the name back to models.yaml.
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 10
+          title: Reason
+        actor:
+          type: string
+          format: uuid
+          title: Actor
+      type: object
+      required:
+      - name
+      - models
+      - reason
+      - actor
+      title: ModelChoiceRequest
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
     SimilarRequest:
       properties:
         user_id:

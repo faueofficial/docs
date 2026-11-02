@@ -750,7 +750,7 @@ paths:
               type: object
               required: [kind, content_type]
               properties:
-                kind: { type: string, enum: [vault, fabric, avatar, share], description: '`share` is a screenshot sent with a share to FAUE.' }
+                kind: { type: string, enum: [vault, fabric, avatar, share, pin], description: '`share` is a screenshot sent with a share to FAUE. `pin` is a photo saved as inspiration; keep it with `POST /inspiration`.' }
                 content_type: { type: string, enum: ['image/jpeg', 'image/png', 'image/heic', 'image/webp'] }
                 byte_size: { type: integer, maximum: 20971520, description: 'Maximum 20 MB' }
       responses:
@@ -1310,7 +1310,10 @@ paths:
       description: |
         `MVP` Assembles everything held about the person (profile, body profile, consents, Style DNA,
         quiz answers, uploads, vault, wear log, saved looks, connected accounts and imported pins,
-        notifications and waitlist entry). Sign-in secrets and stored provider tokens are not included.
+        notifications and waitlist entry), and under `styling_engine` everything ASE holds: what it learned,
+        the looks and jobs it made, daily suggestions, chat and the model calls made for the person (vectors
+        are left out). Sign-in secrets and stored provider tokens are not included. When ASE cannot be read
+        the request fails with `503` rather than return an incomplete archive.
 
         Returns **202** with a job; fetch `poll_url` for the archive. It is kept for seven days and
         stored encrypted.
@@ -2826,7 +2829,11 @@ paths:
 
         Requires `personalization` and `ai_processing` consent; without them the call is **403**, because building this is precisely
 
-        the processing those consents cover.'
+        the processing those consents cover.
+
+
+        When the wardrobe cannot make a look yet, the answer is `200` with `run_id: null` and a `reason_code` (`cold_start`,
+        `empty_pool`, `no_valid_look`, `no_suggestion`, `content_not_reviewed`): an ordinary state, not an error.'
       responses:
         '200':
           description: Successful Response
@@ -3303,6 +3310,130 @@ paths:
                     type: array
                 type: object
 
+  /inspiration:
+    get:
+      tags:
+      - inspiration
+      summary: List Boards
+      description: Everything you have saved, by board. Your own photos come first.
+      operationId: list_boards_v1_inspiration_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Board'
+                type: array
+                title: Response List Boards V1 Inspiration Get
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - inspiration
+      summary: Add Photo
+      description: 'Save a photo of something you love. Upload it first with `kind: pin`: faces and text are removed like any
+        other photo.
+
+
+        With personalization consent, ASE learns the colours in it. Requires `camera_photos` consent; without it the call is
+        **403**.'
+      operationId: add_photo_v1_inspiration_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPhoto'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPin'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /inspiration/boards/{board_id}:
+    get:
+      tags:
+      - inspiration
+      summary: Board Pins
+      description: What is saved on one board, newest first. A board that is not yours reads as empty.
+      operationId: board_pins_v1_inspiration_boards__board_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: board_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Board Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 60
+          minimum: 1
+          default: 30
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPins'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /inspiration/{pin_id}:
+    delete:
+      tags:
+      - inspiration
+      summary: Remove Photo
+      description: Remove one of your photos, and what ASE learned from it. Never gated by consent.
+      operationId: remove_photo_v1_inspiration__pin_id__delete
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: pin_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Pin Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
 components:
 
   securitySchemes:
@@ -3375,6 +3506,137 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
 
   schemas:
+    AddPhoto:
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          title: Asset Id
+          description: A `pin` upload that has finished processing.
+        title:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Title
+          description: What you love about it, if you want to say.
+      type: object
+      required:
+      - asset_id
+      title: AddPhoto
+    Board:
+      properties:
+        board_id:
+          type: string
+          title: Board Id
+        name:
+          type: string
+          title: Name
+        source:
+          type: string
+          enum:
+          - photos
+          - pinterest
+          title: Source
+        pin_count:
+          type: integer
+          title: Pin Count
+        covers:
+          items:
+            type: string
+          type: array
+          title: Covers
+          description: Up to three pictures, newest first.
+      type: object
+      required:
+      - board_id
+      - name
+      - source
+      - pin_count
+      - covers
+      title: Board
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    SavedPin:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        image_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Image Url
+          description: Null when there is no picture to show. Show the title instead.
+        removable:
+          type: boolean
+          title: Removable
+          description: True for your own photos. Pinterest's go with their board.
+      type: object
+      required:
+      - id
+      - removable
+      title: SavedPin
+    SavedPins:
+      properties:
+        board_id:
+          type: string
+          title: Board Id
+        pins:
+          items:
+            $ref: '#/components/schemas/SavedPin'
+          type: array
+          title: Pins
+        next_offset:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Next Offset
+          description: Send it back as `offset` for the next page. Null on the last page.
+      type: object
+      required:
+      - board_id
+      - pins
+      title: SavedPins
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
     PinterestPins:
       properties:
         board_id:
@@ -3454,6 +3716,12 @@ components:
           - type: 'null'
           title: Note
           description: Anything else, in your words. Used only with personalisation consent; contact details are removed.
+        item_ids:
+          type: array
+          items: { type: string, format: uuid }
+          maxItems: 3
+          title: Item Ids
+          description: Pieces from your vault to style. Every look is built around them. A piece that is not yours is 422.
       type: object
       title: GenerateIn
     AgentSettingsIn:
