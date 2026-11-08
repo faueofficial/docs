@@ -2,7 +2,7 @@
 
 **Stage:** Y2 (build) · MVP (one data-model decision) · **ADR:** [0021](../80-adr/0021-workspace-tenancy-model.md)
 
-FAUE's long-term direction is fashion technology, not a consumer styling app that happens to be popular — used in fashion shows, in pop-up collaborations, and daily by the stylists and tailors who actually make clothes happen in Nigeria.
+FAUE's long-term direction is fashion technology, not a consumer styling app that happens to be popular — used in fashion shows, in pop-up collaborations, and daily by the stylists and tailors who actually make clothes happen across Africa, starting in Nigeria.
 
 This document defines who those professionals are, what would make them stay, the order to approach them in, and — the only part that affects work today — what must be true of the data model before code is written.
 

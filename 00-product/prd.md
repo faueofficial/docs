@@ -24,7 +24,7 @@ restated in two places drifts in one of them.
 
 ## 1. The problem
 
-Getting dressed well in Nigeria costs more time and money than it should.
+Getting dressed well in Africa costs more time and money than it should. The detail below comes from Nigeria, the first market.
 
 **Ready-to-wear** discovery is scattered across brand Instagram pages with no way
 to see how pieces combine. **Bespoke** has a worse gap: between "I bought fabric"

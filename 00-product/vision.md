@@ -6,7 +6,7 @@
 
 ## 1. The problem
 
-Getting dressed well in Nigeria takes more work than it should, and the work is unevenly distributed.
+Getting dressed well in Africa takes more work than it should, and the work is unevenly distributed. The detail below comes from Nigeria, FAUE's first market.
 
 **For ready-to-wear**, discovery is scattered across dozens of brand Instagram pages with no way to see how pieces combine. Finding something that suits you means hours of scrolling with no intelligent filtering.
 
@@ -20,7 +20,7 @@ And underneath all of it: most people already own clothes they do not wear, beca
 
 ## 2. What FAUE is
 
-**A styling intelligence that understands you, your wardrobe, and your culture — and turns all three into something you can wear tomorrow.**
+**A fashion intelligence platform for Africa that understands you, your wardrobe, and your culture — and turns all three into something you can wear tomorrow.**
 
 Not a shop. Not a mood board. A system that knows what you own, what you like, what suits you, what the occasion demands, and what the weather is doing, and produces a specific answer with a reason attached.
 
@@ -36,14 +36,14 @@ Three things distinguish it:
 
 - **Multimodal models became good enough.** Understanding a fabric photograph, judging whether a combination works, and explaining why in plain language were research problems three years ago and are API calls now.
 - **Image generation became affordable enough** to show someone a look rather than describe it.
-- **Nigerian fashion commerce is growing but fragmented.** Dozens of brands, no aggregation layer, no intelligence layer.
+- **African fashion commerce is growing but fragmented.** Dozens of brands, no aggregation layer, no intelligence layer.
 - **Nobody has built this.** Western styling apps do not know what an Agbada is. Pinterest shows you aspiration with no path to execution. Instagram is discovery without structure.
 
 ---
 
 ## 4. Who it is for
 
-The early adopter is a fashion-conscious Nigerian professional, 22–35, who attends social events regularly, buys fabric for tailoring several times a year, and spends real money on looking right. They currently use Instagram, Pinterest, and WhatsApp groups to make styling decisions, and are frustrated by how long it takes and how often the result disappoints.
+At launch, the early adopter is a fashion-conscious Nigerian professional, 22–35, who attends social events regularly, buys fabric for tailoring several times a year, and spends real money on looking right. They currently use Instagram, Pinterest, and WhatsApp groups to make styling decisions, and are frustrated by how long it takes and how often the result disappoints.
 
 They are not looking for more inspiration. They have too much. They are looking for a decision.
 
@@ -59,7 +59,9 @@ Detail in [`personas.md`](personas.md).
 
 **Year three — the production layer.** The tailor network closes the loop: fabric to style to a vetted tailor to a finished garment, tracked end to end. This is where the bespoke differentiator becomes a marketplace.
 
-**Underneath all three — the data.** Nobody has structured data on how Nigerians actually dress: which fabrics suit which silhouettes, how occasions map to formality, what people own versus what they wear. That dataset is the durable asset, and it is generated as a side effect of being useful.
+**Across Africa.** Nigeria is the first market. Each layer is proven there before it is carried to others, Ghana and Senegal first: different traditional wear, same structural problem. See [`roadmap.md`](roadmap.md).
+
+**Underneath all three — the data.** Nobody has structured data on how Africans actually dress: which fabrics suit which silhouettes, how occasions map to formality, what people own versus what they wear. That dataset is the durable asset, and it is generated as a side effect of being useful.
 
 ---
 
@@ -68,7 +70,7 @@ Detail in [`personas.md`](personas.md).
 - **Not a marketplace first.** Two-sided cold start kills products at this stage. Earn the demand side, then bring the supply side in with data.
 - **Not a social network.** No follower counts, no feeds, no comparison. Sharing exists to spread the product and to reach your tailor, not to build an audience.
 - **Not a body-optimisation tool.** No weight talk, no "flattering for your problem areas", no before-and-after. Body profile exists to make clothes fit better, and that is the whole of it.
-- **Not a Western product with Nigerian skin.** If a feature only makes sense in New York, it does not ship.
+- **Not a Western product with African skin.** If a feature only makes sense in New York, it does not ship.
 - **Not an aggregator of other people's photos.** The style library is licensed or generated, never scraped. See [ADR 0020](../80-adr/0020-style-library-licensed-not-scraped.md).
 
 ---
