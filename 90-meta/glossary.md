@@ -8,7 +8,7 @@ Shared vocabulary. Where a term has a precise meaning in FAUE, that meaning is h
 
 ## Product terms
 
-**FAUE** — the platform. Pronounced "fow-ay". Not an acronym; do not expand it.
+**FAUE** — the fashion intelligence platform for Africa. Pronounced "fow-ay". Not an acronym; do not expand it.
 
 **ase** — the styling intelligence service, from Yoruba *àṣẹ* (authority, the power to make things happen). Internal only; never exposed to clients. Lower case in code and prose.
 
